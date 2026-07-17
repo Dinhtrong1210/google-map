@@ -748,24 +748,25 @@ def tool_deposit():
     db.commit()
     tx_id = cursor.lastrowid
 
-    sepay_url = None
     sepay_account = SEPAY_ACCOUNT_ID
-    sepay_api_key = SEPAY_API_KEY
+    description = f'NAP{tx_id}'
+    vietqr_url = None
 
-    if SEPAY_API_KEY and SEPAY_ACCOUNT_ID:
-        sepay_url = (
-            f"https://sandbox.sepay.vn/payment?account={SEPAY_ACCOUNT_ID}"
-            f"&amount={amount}&des=NAP{tx_id}&sepay_api_key={SEPAY_API_KEY}"
+    if SEPAY_ACCOUNT_ID:
+        vietqr_url = (
+            f"https://vietqr.app/img?acc={SEPAY_ACCOUNT_ID}"
+            f"&bank=Sacombank&amount={amount}"
+            f"&des={description}&showinfo=true"
         )
 
     return jsonify({
         'transaction_id': tx_id,
         'amount': amount,
         'status': 'pending',
-        'sepay_url': sepay_url,
+        'vietqr_url': vietqr_url,
         'sepay_account': sepay_account,
-        'description': f'NAP{tx_id}',
-        'note': f'Chuyen khoan {amount:,}d voi noi dung: NAP{tx_id}'
+        'description': description,
+        'note': f'Chuyen khoan {amount:,}d voi noi dung: {description}'
     })
 
 

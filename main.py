@@ -959,7 +959,7 @@ class ReviewBotApp:
 
         tx_id = resp.get('transaction_id')
         self.deposit_tx_id = tx_id
-        sepay_url = resp.get('sepay_url')
+        sepay_url = resp.get('vietqr_url')
         description = resp.get('description', f'NAP{tx_id}')
         note = resp.get('note', '')
 
@@ -978,35 +978,39 @@ class ReviewBotApp:
         poll_thread.start()
 
     def _display_qr(self, qr_data, amount, description, note):
-        if not HAS_QRCODE:
-            self.qr_label.config(text=f"Can cai thu vien qrcode:\npip install qrcode[pil]")
-            self.deposit_info_label.config(text=f"So tien: {amount:,}d\nNoi dung: {description}\n{note}")
-            return
+        qr_dir = os.path.join(os.getcwd(), "temp")
+        os.makedirs(qr_dir, exist_ok=True)
+        qr_path = os.path.join(qr_dir, f"deposit_qr_{self.deposit_tx_id}.png")
 
         try:
-            qr = qrcode.QRCode(version=1, box_size=6, border=3)
-            qr.add_data(qr_data)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
+            if qr_data.startswith('http'):
+                import urllib.request as urlreq
+                urlreq.urlretrieve(qr_data, qr_path)
+            elif HAS_QRCODE:
+                qr = qrcode.QRCode(version=1, box_size=6, border=3)
+                qr.add_data(qr_data)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+                img.save(qr_path)
+            else:
+                self.qr_label.config(text="Khong the tao QR")
+                return
 
-            qr_dir = os.path.join(os.getcwd(), "temp")
-            os.makedirs(qr_dir, exist_ok=True)
-            qr_path = os.path.join(qr_dir, f"deposit_qr_{self.deposit_tx_id}.png")
-            img.save(qr_path)
-
-            if HAS_PIL:
+            if HAS_PIL and os.path.exists(qr_path):
                 pil_img = Image.open(qr_path)
-                pil_img = pil_img.resize((250, 250), Image.LANCZOS)
+                pil_img = pil_img.resize((280, 280), Image.LANCZOS)
                 self._qr_photo = ImageTk.PhotoImage(pil_img)
                 self.qr_label.config(image=self._qr_photo, text="")
+            elif os.path.exists(qr_path):
+                self.qr_label.config(text=f"[QR saved: {qr_path}]")
             else:
-                self.qr_label.config(text=f"[QR saved to {qr_path}]\nMo file de xem")
+                self.qr_label.config(text="Khong the tao QR")
 
             info = f"So tien: {amount:,}d\n"
             info += f"Noi dung: {description}\n"
             if note:
                 info += f"{note}\n"
-            info += "\nQuet QR de thanh toan!"
+            info += "\nMo app ngan hang -> Quet QR -> Chuyen khoan"
             self.deposit_info_label.config(text=info)
 
         except Exception as e:
