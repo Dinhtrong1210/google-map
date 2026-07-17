@@ -40,6 +40,54 @@
                 <div class="number">{{ total_reviews }}</div>
                 <div class="label">Tổng đánh giá</div>
             </div>
+            <div class="stat-card info">
+                <div class="number">{{ reviews_today }}</div>
+                <div class="label">Hôm nay</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="number">{{ reviews_this_week }}</div>
+                <div class="label">7 ngày qua</div>
+            </div>
+            <div class="stat-card" style="border-color:var(--accent);">
+                <div class="number" style="color:var(--accent);">{{ reviews_this_month }}</div>
+                <div class="label">Tháng này</div>
+            </div>
+        </div>
+
+        <!-- STATS CHARTS -->
+        <div class="stats-grid" style="grid-template-columns:1fr 1fr;">
+            <div class="card">
+                <div class="card-header">Đánh giá 7 ngày qua</div>
+                <div class="card-body">
+                    {% set max_day = days_7 | map(attribute='count') | max if days_7 else 1 %}
+                    {% set max_day = max_day if max_day > 0 else 1 %}
+                    <div style="display:flex;align-items:flex-end;gap:6px;height:140px;padding-top:10px;">
+                        {% for d in days_7 %}
+                        <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;">
+                            <span style="font-size:11px;color:var(--accent);font-weight:600;margin-bottom:4px;">{{ d.count }}</span>
+                            <div style="width:100%;background:var(--accent);border-radius:4px 4px 0 0;height:{{ (d.count / max_day * 100) if max_day > 0 else 0 }}%;min-height:{{ '2px' if d.count > 0 else '0px' }};transition:height 0.3s;"></div>
+                            <span style="font-size:10px;color:var(--dim);margin-top:4px;">{{ d.label }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">Đánh giá 12 tháng qua</div>
+                <div class="card-body">
+                    {% set max_month = months_12 | map(attribute='count') | max if months_12 else 1 %}
+                    {% set max_month = max_month if max_month > 0 else 1 %}
+                    <div style="display:flex;align-items:flex-end;gap:4px;height:140px;padding-top:10px;">
+                        {% for m in months_12 %}
+                        <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;">
+                            <span style="font-size:10px;color:var(--warning);font-weight:600;margin-bottom:4px;">{{ m.count }}</span>
+                            <div style="width:100%;background:var(--warning);border-radius:4px 4px 0 0;height:{{ (m.count / max_month * 100) if max_month > 0 else 0 }}%;min-height:{{ '2px' if m.count > 0 else '0px' }};transition:height 0.3s;"></div>
+                            <span style="font-size:9px;color:var(--dim);margin-top:4px;writing-mode:vertical-lr;transform:rotate(180deg);max-height:50px;">{{ m.label }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- USERS SECTION -->

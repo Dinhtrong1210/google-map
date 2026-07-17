@@ -629,11 +629,57 @@ def admin_dashboard():
     total_users_count = db.execute('SELECT COUNT(*) FROM users WHERE role = "user"').fetchone()[0]
     total_reviews = db.execute('SELECT COUNT(*) FROM reviews').fetchone()[0]
 
+    reviews_today = db.execute(
+        'SELECT COUNT(*) FROM reviews WHERE DATE(created_at) = DATE("now")'
+    ).fetchone()[0]
+    reviews_this_week = db.execute(
+        'SELECT COUNT(*) FROM reviews WHERE created_at >= DATE("now", "-7 days")'
+    ).fetchone()[0]
+    reviews_this_month = db.execute(
+        'SELECT COUNT(*) FROM reviews WHERE created_at >= DATE("now", "start of month")'
+    ).fetchone()[0]
+
+    last_7_days = db.execute(
+        "SELECT DATE(created_at) as day, COUNT(*) as cnt FROM reviews "
+        "WHERE created_at >= DATE('now', '-7 days') GROUP BY DATE(created_at) ORDER BY day"
+    ).fetchall()
+    last_7_days_data = {row['day']: row['cnt'] for row in last_7_days}
+
+    from datetime import timedelta
+    today = datetime.now().date()
+    days_7 = []
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        ds = d.strftime('%Y-%m-%d')
+        days_7.append({'day': ds, 'label': d.strftime('%d/%m'), 'count': last_7_days_data.get(ds, 0)})
+
+    last_12_months = db.execute(
+        "SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as cnt FROM reviews "
+        "WHERE created_at >= DATE('now', '-12 months') GROUP BY strftime('%Y-%m', created_at) ORDER BY month"
+    ).fetchall()
+    last_12_months_data = {row['month']: row['cnt'] for row in last_12_months}
+
+    months_12 = []
+    for i in range(11, -1, -1):
+        d = today.replace(day=1)
+        for _ in range(i):
+            if d.month == 1:
+                d = d.replace(year=d.year-1, month=12)
+            else:
+                d = d.replace(month=d.month-1)
+        ms = d.strftime('%Y-%m')
+        months_12.append({'month': ms, 'label': d.strftime('%m/%Y'), 'count': last_12_months_data.get(ms, 0)})
+
     return render_template('admin.html',
                            users=users,
                            reviews=reviews,
                            total_users=total_users_count,
                            total_reviews=total_reviews,
+                           reviews_today=reviews_today,
+                           reviews_this_week=reviews_this_week,
+                           reviews_this_month=reviews_this_month,
+                           days_7=days_7,
+                           months_12=months_12,
                            search=search,
                            page=page,
                            total_pages=total_pages)
