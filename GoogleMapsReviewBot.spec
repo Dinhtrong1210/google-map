@@ -3,14 +3,10 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('config.json', '.')]
 binaries = []
-hiddenimports = ['review_bot', 'webdriver_manager', 'webdriver_manager.chrome', 'selenium', 'selenium.webdriver', 'selenium.webdriver.chrome', 'selenium.webdriver.chrome.service', 'selenium.webdriver.chrome.options', 'qrcode', 'qrcode.image', 'qrcode.image.pil', 'PIL', 'PIL.Image', 'PIL.ImageTk']
+hiddenimports = ['review_bot', 'webdriver_manager', 'webdriver_manager.chrome', 'selenium', 'selenium.webdriver', 'selenium.webdriver.chrome', 'selenium.webdriver.chrome.service', 'selenium.webdriver.chrome.options']
 tmp_ret = collect_all('webdriver_manager')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('selenium')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('qrcode')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('PIL')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
@@ -48,5 +44,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='NONE',
+    icon=['icon.ico'],
 )

@@ -17,7 +17,7 @@ echo.
 
 pyinstaller --noconfirm --onefile --windowed ^
     --name "GoogleMapsReviewBot" ^
-    --icon=NONE ^
+    --icon=icon.ico ^
     --add-data "config.json;." ^
     --hidden-import=review_bot ^
     --hidden-import=webdriver_manager ^
