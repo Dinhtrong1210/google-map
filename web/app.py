@@ -722,6 +722,87 @@ def tool_deduct():
     })
 
 
+@app.route('/api/tool/deposit', methods=['POST'])
+def tool_deposit():
+    user_id = _tool_auth()
+    if not user_id:
+        return jsonify({'error': 'Session expired'}), 401
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data'}), 400
+
+    try:
+        amount = int(data.get('amount', 0))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'So tien khong hop le'}), 400
+
+    if amount < 10000:
+        return jsonify({'error': 'Toi thieu 10,000d'}), 400
+
+    db = get_db()
+    cursor = db.execute(
+        'INSERT INTO transactions (user_id, amount, type, description, status) VALUES (?, ?, ?, ?, ?)',
+        (user_id, amount, 'deposit', f'Nap {amount:,}d tu tool', 'pending')
+    )
+    db.commit()
+    tx_id = cursor.lastrowid
+
+    sepay_url = None
+    sepay_account = SEPAY_ACCOUNT_ID
+    sepay_api_key = SEPAY_API_KEY
+
+    if SEPAY_API_KEY and SEPAY_ACCOUNT_ID:
+        sepay_url = (
+            f"https://sandbox.sepay.vn/payment?account={SEPAY_ACCOUNT_ID}"
+            f"&amount={amount}&des=NAP{tx_id}&sepay_api_key={SEPAY_API_KEY}"
+        )
+
+    return jsonify({
+        'transaction_id': tx_id,
+        'amount': amount,
+        'status': 'pending',
+        'sepay_url': sepay_url,
+        'sepay_account': sepay_account,
+        'description': f'NAP{tx_id}',
+        'note': f'Chuyen khoan {amount:,}d voi noi dung: NAP{tx_id}'
+    })
+
+
+@app.route('/api/tool/check-deposit/<int:tx_id>')
+def tool_check_deposit(tx_id):
+    user_id = _tool_auth()
+    if not user_id:
+        return jsonify({'error': 'Session expired'}), 401
+
+    db = get_db()
+    tx = db.execute(
+        'SELECT status, amount FROM transactions WHERE id = ? AND user_id = ?',
+        (tx_id, user_id)
+    ).fetchone()
+
+    if not tx:
+        return jsonify({'error': 'Not found'}), 404
+
+    return jsonify({
+        'status': tx['status'],
+        'amount': tx['amount']
+    })
+
+
+@app.route('/api/tool/sepay-settings')
+def tool_sepay_settings():
+    user_id = _tool_auth()
+    if not user_id:
+        return jsonify({'error': 'Session expired'}), 401
+
+    return jsonify({
+        'sepay_api_key': SEPAY_API_KEY,
+        'sepay_account_id': SEPAY_ACCOUNT_ID,
+        'has_sepay': bool(SEPAY_API_KEY and SEPAY_ACCOUNT_ID)
+    })
+
+
 @app.route('/api/tool/history')
 def tool_history():
     user_id = _tool_auth()

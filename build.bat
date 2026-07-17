@@ -27,8 +27,16 @@ pyinstaller --noconfirm --onefile --windowed ^
     --hidden-import=selenium.webdriver.chrome ^
     --hidden-import=selenium.webdriver.chrome.service ^
     --hidden-import=selenium.webdriver.chrome.options ^
+    --hidden-import=qrcode ^
+    --hidden-import=qrcode.image ^
+    --hidden-import=qrcode.image.pil ^
+    --hidden-import=PIL ^
+    --hidden-import=PIL.Image ^
+    --hidden-import=PIL.ImageTk ^
     --collect-all webdriver_manager ^
     --collect-all selenium ^
+    --collect-all qrcode ^
+    --collect-all PIL ^
     main.py
 
 if errorlevel 1 (
