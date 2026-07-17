@@ -88,6 +88,7 @@ class ReviewBotApp:
         self.google_accounts = []
         self.google_accounts_status = {}
         self.review_count = 0
+        self._is_reviewing = False
 
         self._load_config()
         self._show_login_screen()
@@ -365,10 +366,10 @@ class ReviewBotApp:
                            bg=COLORS['bg2'], fg=COLORS['star'], selectcolor=COLORS['bg3'],
                            activebackground=COLORS['bg2']).pack(side=tk.LEFT, padx=3)
 
-        tk.Label(row_opt, text="  Chrome:", font=self.fonts['small'],
+        tk.Label(row_opt, text="  So luong:", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg2']).pack(side=tk.LEFT, padx=(12, 0))
-        self.chrome_count = tk.IntVar(value=1)
-        tk.Spinbox(row_opt, from_=1, to=10, textvariable=self.chrome_count, width=3,
+        self.target_count = tk.IntVar(value=5)
+        tk.Spinbox(row_opt, from_=1, to=500, textvariable=self.target_count, width=5,
                    bg=COLORS['bg3'], fg=COLORS['fg'], font=self.fonts['body'],
                    buttonbackground=COLORS['bg4'], relief=tk.FLAT).pack(side=tk.LEFT, padx=4)
 
@@ -539,7 +540,7 @@ class ReviewBotApp:
                 'google_accounts_status': self.google_accounts_status,
                 'last_url': self.url_entry.get().strip() if hasattr(self, 'url_entry') else '',
                 'last_stars': self.star_var.get() if hasattr(self, 'star_var') else 5,
-                'last_chrome_count': self.chrome_count.get() if hasattr(self, 'chrome_count') else 1,
+                'last_target_count': self.target_count.get() if hasattr(self, 'target_count') else 5,
                 'last_comments': self.comment_text.get('1.0', tk.END).strip() if hasattr(self, 'comment_text') else '',
                 'review_count': self.review_count,
             }
@@ -565,8 +566,8 @@ class ReviewBotApp:
                     self.url_entry.insert(0, cfg.get('last_url', ''))
                 if hasattr(self, 'star_var'):
                     self.star_var.set(cfg.get('last_stars', 5))
-                if hasattr(self, 'chrome_count'):
-                    self.chrome_count.set(cfg.get('last_chrome_count', 1))
+                if hasattr(self, 'target_count'):
+                    self.target_count.set(cfg.get('last_target_count', 5))
                 if hasattr(self, 'comment_text'):
                     self.comment_text.delete('1.0', tk.END)
                     self.comment_text.insert('1.0', cfg.get('last_comments', ''))
@@ -583,7 +584,7 @@ class ReviewBotApp:
     def _update_comment_hint(self, event=None):
         raw = self.comment_text.get('1.0', tk.END).strip()
         lines = [l for l in raw.split('\n') if l.strip()] if raw else []
-        self.comment_hint.config(text=f"{len(lines)} dong | Moi Chrome lay 1 dong ngau nhien")
+        self.comment_hint.config(text=f"{len(lines)} noi dung | Moi tai khoan lay 1 noi dung ngau nhien")
 
     def _log(self, msg, is_error=False):
         def _do():
@@ -596,7 +597,7 @@ class ReviewBotApp:
         url = self.url_entry.get().strip()
         raw = self.comment_text.get('1.0', tk.END).strip()
         comment_lines = [l.strip() for l in raw.split('\n') if l.strip()] if raw else []
-        chrome_count = self.chrome_count.get()
+        target = self.target_count.get()
         stars = self.star_var.get()
 
         if not url:
@@ -614,21 +615,32 @@ class ReviewBotApp:
             messagebox.showerror("Loi", "Nhap it nhat 1 tai khoan Google!\nVao trang 'Tai khoan GG' de them.")
             return
 
-        if not messagebox.askyesno("Xac nhan", f"Chay {chrome_count} Chrome voi {len(comment_lines)} noi dung?\n{len(self.google_accounts)} tai khoan GG"):
+        max_possible = min(target, len(self.google_accounts))
+        if max_possible <= 0:
+            messagebox.showerror("Loi", "Khong du tai khoan de danh gia!")
+            return
+
+        if not messagebox.askyesno("Xac nhan",
+                f"Muc tieu: {target} danh gia\n"
+                f"Tai khoan: {len(self.google_accounts)}\n"
+                f"Se chay: {max_possible} danh gia\n\n"
+                f"Bat dau?"):
             return
 
         self.log_text.delete('1.0', tk.END)
-        self._log(f"BAT DAU: {chrome_count} Chrome | {len(comment_lines)} noi dung | {len(self.google_accounts)} tai khoan")
+        self._log(f"BAT DAU: muc tieu {target} | {len(self.google_accounts)} tai khoan | se chay {max_possible}")
         self._stop_event.clear()
         self.btn_start.config(state=tk.DISABLED)
         self.btn_stop.config(state=tk.NORMAL)
+        self._is_reviewing = True
 
         thread = threading.Thread(target=self._run_review,
-                                  args=(url, comment_lines, stars, chrome_count))
+                                  args=(url, comment_lines, stars, target))
         thread.daemon = True
         thread.start()
 
-    def _run_review(self, url, comment_lines, stars, chrome_count):
+    def _run_review(self, url, comment_lines, stars, target):
+        session_reviewed = 0
         try:
             self.bots = []
             shuffled_comments = comment_lines[:]
@@ -636,11 +648,15 @@ class ReviewBotApp:
             shuffled_accounts = self.google_accounts[:]
             random.shuffle(shuffled_accounts)
 
-            for j in range(chrome_count):
+            actual_count = min(target, len(shuffled_accounts))
+            self._log(f"Se danh gia {actual_count}/{target} (dung {actual_count} tai khoan)")
+
+            for j in range(actual_count):
                 if self._stop_event.is_set():
+                    self._log("Dung boi nguoi dung!")
                     break
 
-                account = shuffled_accounts[j % len(shuffled_accounts)]
+                account = shuffled_accounts[j]
                 comment = shuffled_comments[j % len(shuffled_comments)]
                 email = account.get('email', '')
                 password = account.get('password', '')
@@ -651,91 +667,94 @@ class ReviewBotApp:
 
                 already_logged = self.google_accounts_status.get(email, False)
 
-                self._log(f"\n--- Chrome {j+1}/{chrome_count} ---")
+                self._log(f"\n--- [{j+1}/{actual_count}] ---")
                 self._log(f"  TK: {email}")
                 if already_logged:
-                    self._log(f"  [Session cu - skip login]")
+                    self._log(f"  [Session cu]")
                 else:
                     self._log(f"  [Dang nhap moi]")
                 self._log(f"  Noi dung: {comment[:60]}...")
 
-                def run_one(c_idx, c_comment, c_email, c_password, c_profile_dir, c_already_logged):
-                    bot = None
-                    try:
-                        bot = GoogleMapsReviewBot(
-                            headless=False,
-                            user_data_dir=c_profile_dir,
-                            debug_port=9222 + c_idx
-                        )
-                        bot.set_status_callback(self._log)
-                        self.bots.append(bot)
+                bot = None
+                try:
+                    bot = GoogleMapsReviewBot(
+                        headless=False,
+                        user_data_dir=profile_dir,
+                        debug_port=9222 + j
+                    )
+                    bot.set_status_callback(self._log)
+                    self.bots.append(bot)
 
-                        if not bot.start_browser():
-                            self._log("Loi Chrome!", True)
-                            return
+                    if not bot.start_browser():
+                        self._log("Loi Chrome! Bo qua.", True)
+                        continue
 
-                        if not c_already_logged:
-                            if not bot.login_google(c_email, c_password):
-                                self._log("Loi dang nhap! Bo qua tai khoan nay.", True)
-                                return
-                            self.google_accounts_status[c_email] = True
+                    if not already_logged:
+                        if not bot.login_google(email, password):
+                            self._log("Loi dang nhap! Bo qua.", True)
+                            continue
+                        self.google_accounts_status[email] = True
+                        self._save_config()
+                    else:
+                        self._log(f"  Kiem tra session...")
+                        if not bot.login_google(email, password):
+                            self._log(f"  Session het han, dang nhap lai...")
+                            if not bot.login_google(email, password):
+                                self._log("Loi dang nhap!", True)
+                                self.google_accounts_status[email] = False
+                                continue
+                            self.google_accounts_status[email] = True
                             self._save_config()
                         else:
-                            self._log(f"  Kiem tra session cu...")
-                            if not bot.login_google(c_email, c_password):
-                                self._log(f"  Session het han, dang nhap lai...")
-                                if not bot.login_google(c_email, c_password):
-                                    self._log("Loi dang nhap!", True)
-                                    self.google_accounts_status[c_email] = False
-                                    return
-                                self.google_accounts_status[c_email] = True
-                                self._save_config()
-                            else:
-                                self._log(f"  Session con hop le - skip login!")
+                            self._log(f"  Session hop le!")
 
-                        if not bot.navigate_to_place(url):
-                            self._log("Loi dia diem!", True)
-                            return
-                        if not bot.click_write_review_button():
-                            self._log("Loi nut review!", True)
-                            return
-                        if not bot.select_star_rating(stars):
-                            self._log("Loi chon sao!", True)
-                            return
-                        if not bot.write_comment(c_comment):
-                            self._log("Loi viet binh luan!", True)
-                            return
-                        if not bot.submit_review():
-                            self._log("Loi gui danh gia!", True)
-                            return
+                    if not bot.navigate_to_place(url):
+                        self._log("Loi dia diem! Bo qua.", True)
+                        continue
+                    if not bot.click_write_review_button():
+                        self._log("Loi nut review! Bo qua.", True)
+                        continue
+                    if not bot.select_star_rating(stars):
+                        self._log("Loi chon sao! Bo qua.", True)
+                        continue
+                    if not bot.write_comment(comment):
+                        self._log("Loi viet binh luan! Bo qua.", True)
+                        continue
+                    if not bot.submit_review():
+                        self._log("Loi gui danh gia! Bo qua.", True)
+                        continue
 
-                        self._log(f"  HOAN THANH!")
-                        self.review_count += 1
-                        self._save_config()
-                        api_call('/api/tool/review-done', 'POST',
-                                 {'place_url': url, 'comment': c_comment, 'stars': stars},
-                                 token=self.token, server_url=self.server_url)
+                    self._log(f"  THANH CONG!")
+                    session_reviewed += 1
+                    self.review_count += 1
+                    self._save_config()
+                    api_call('/api/tool/review-done', 'POST',
+                             {'place_url': url, 'comment': comment, 'stars': stars},
+                             token=self.token, server_url=self.server_url)
+                    self._log(f"  Tong: {session_reviewed}/{actual_count} | Tool: {self.review_count}")
 
-                    except Exception as e:
-                        self._log(f"  Loi: {e}", True)
-                    finally:
-                        if bot:
-                            try:
-                                bot.close_browser()
-                            except:
-                                pass
-
-                t = threading.Thread(target=run_one,
-                                     args=(j, comment, email, password, profile_dir, already_logged))
-                t.start()
-                time.sleep(3)
+                except Exception as e:
+                    self._log(f"  Loi: {e}", True)
+                finally:
+                    if bot:
+                        try:
+                            bot.close_browser()
+                        except:
+                            pass
 
             self._log("\n" + "=" * 40)
-            self._log(f"HOAN TAT! Tong da danh gia: {self.review_count}")
+            if session_reviewed >= target:
+                self._log(f"DAT MUC TIEU! Da danh gia {session_reviewed}/{target}")
+            elif session_reviewed >= actual_count:
+                self._log(f"HET TAI KHOAN! Da danh gia {session_reviewed}/{target}")
+            else:
+                self._log(f"DUNG! Da danh gia {session_reviewed}/{target}")
+            self._log(f"Tong tool: {self.review_count} danh gia")
 
         except Exception as e:
             self._log(f"Loi chinh: {e}", True)
         finally:
+            self._is_reviewing = False
             self.root.after(0, lambda: self.btn_start.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.btn_stop.config(state=tk.DISABLED))
 
