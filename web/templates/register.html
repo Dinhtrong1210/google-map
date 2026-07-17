@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Đăng ký{% endblock %}
+{% block body %}
+<div class="auth-container">
+    <div class="auth-box">
+        <h1>Review Bot</h1>
+        <p class="subtitle">Tạo tài khoản mới</p>
+
+        <form method="POST">
+            <div class="form-group">
+                <label>Họ và tên</label>
+                <input type="text" name="fullname" placeholder="Nguyen Van A">
+            </div>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" placeholder="Chọn username" required>
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="email" placeholder="email@example.com" required>
+            </div>
+            <div class="form-group">
+                <label>Mật khẩu</label>
+                <input type="password" name="password" placeholder="Tối thiểu 6 ký tự" required minlength="6">
+            </div>
+            <button type="submit" class="btn btn-primary">Đăng ký</button>
+        </form>
+
+        <div class="auth-link">
+            Đã có tài khoản? <a href="{{ url_for('login') }}">Đăng nhập</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

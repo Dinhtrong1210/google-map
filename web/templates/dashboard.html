@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block body %}
+<div class="layout">
+    <div class="sidebar">
+        <div class="sidebar-logo">
+            <h2>Review Bot</h2>
+            <p>Google Maps Manager</p>
+        </div>
+        <div class="sidebar-menu">
+            <a href="{{ url_for('dashboard') }}" class="active">
+                <span class="icon">🏠</span> Dashboard
+            </a>
+            <a href="#wallet" onclick="scrollTo('wallet')">
+                <span class="icon">💰</span> Ví tiền
+            </a>
+            <a href="#history" onclick="scrollTo('history')">
+                <span class="icon">📋</span> Lịch sử
+            </a>
+            <a href="#profile" onclick="scrollTo('profile')">
+                <span class="icon">👤</span> Tài khoản
+            </a>
+        </div>
+        <div class="sidebar-user">
+            <p class="name">{{ current_user.fullname or current_user.username }}</p>
+            <p class="role">User</p>
+            <a href="{{ url_for('logout') }}">Đăng xuất</a>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="page-header">
+            <h1>Xin chào, {{ current_user.fullname or current_user.username }}!</h1>
+            <p>Quản lý ví tiền và theo dõi đánh giá</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="number">{{ "{:,}".format(current_user.wallet_balance) }}đ</div>
+                <div class="label">Số dư hiện tại</div>
+            </div>
+            <div class="stat-card success">
+                <div class="number">{{ current_user.wallet_balance // review_price }}</div>
+                <div class="label">Đánh giá còn lại</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="number">{{ current_user.total_reviews }}</div>
+                <div class="label">Tổng đã đánh giá</div>
+            </div>
+            <div class="stat-card info">
+                <div class="number">{{ "{:,}".format(review_price) }}đ</div>
+                <div class="label">Giá / đánh giá</div>
+            </div>
+        </div>
+
+        <!-- WALLET -->
+        <div id="wallet" class="wallet-card">
+            <div class="wallet-info">
+                <h3>Số dư ví</h3>
+                <div class="amount">{{ "{:,}".format(current_user.wallet_balance) }} <span>VNĐ</span></div>
+            </div>
+            <div class="wallet-actions">
+                <button class="btn btn-success" onclick="openDepositModal()">Nạp tiền</button>
+            </div>
+        </div>
+
+        <!-- API KEY -->
+        {% if api_key %}
+        <div class="card">
+            <div class="card-header">
+                API Key cho Bot
+                <button class="btn btn-sm btn-outline" onclick="copyKey()">Copy Key</button>
+            </div>
+            <div class="card-body">
+                <div class="api-key-box">
+                    <span class="key" id="api-key">{{ api_key }}</span>
+                </div>
+                <p style="margin-top:10px;font-size:12px;color:var(--dim);">
+                    Dùng API key này trong file config của bot để tự động kiểm tra số dư.
+                </p>
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body" style="text-align:center;color:var(--dim);padding:24px;">
+                Chưa có API Key. Liên hệ Admin để được cấp.
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- HISTORY -->
+        <div id="history">
+            <div class="card">
+                <div class="card-header">Lịch sử nạp tiền</div>
+                <div class="card-body">
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Thời gian</th>
+                                    <th>Số tiền</th>
+                                    <th>Loại</th>
+                                    <th>Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for tx in transactions %}
+                                <tr>
+                                    <td>{{ tx.created_at }}</td>
+                                    <td style="font-weight:600;">{{ "{:,}".format(tx.amount) }}đ</td>
+                                    <td>{{ tx.description }}</td>
+                                    <td>
+                                        {% if tx.status == 'completed' %}
+                                        <span class="badge badge-success">Thành công</span>
+                                        {% elif tx.status == 'pending' %}
+                                        <span class="badge badge-warning">Chờ xử lý</span>
+                                        {% else %}
+                                        <span class="badge badge-error">Thất bại</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if not transactions %}
+                                <tr><td colspan="4" style="text-align:center;color:var(--dim);padding:20px;">Chưa có giao dịch</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Lịch sử đánh giá</div>
+                <div class="card-body">
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Thời gian</th>
+                                    <th>Địa điểm</th>
+                                    <th>Sao</th>
+                                    <th>Chi phí</th>
+                                    <th>Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in reviews %}
+                                <tr>
+                                    <td>{{ r.created_at }}</td>
+                                    <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.place_url[:60] }}{% if r.place_url|length > 60 %}...{% endif %}</td>
+                                    <td>{{ '⭐' * r.stars }}</td>
+                                    <td>{{ "{:,}".format(r.cost) }}đ</td>
+                                    <td>
+                                        {% if r.status == 'completed' %}
+                                        <span class="badge badge-success">OK</span>
+                                        {% else %}
+                                        <span class="badge badge-warning">{{ r.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if not reviews %}
+                                <tr><td colspan="5" style="text-align:center;color:var(--dim);padding:20px;">Chưa có đánh giá</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PROFILE -->
+        <div id="profile" class="card">
+            <div class="card-header">Thông tin tài khoản</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('update_profile') }}">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Username</label>
+                            <input type="text" value="{{ current_user.username }}" disabled>
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" value="{{ current_user.email }}" disabled>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Họ và tên</label>
+                            <input type="text" name="fullname" value="{{ current_user.fullname or '' }}" placeholder="Nhập họ tên">
+                        </div>
+                        <div class="form-group">
+                            <label>Số điện thoại</label>
+                            <input type="text" name="phone" value="{{ current_user.phone or '' }}" placeholder="Nhập SĐT">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Mật khẩu mới (để trống nếu không đổi)</label>
+                        <input type="password" name="new_password" placeholder="Tối thiểu 6 ký tự" minlength="6">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:auto;padding:10px 24px;">Cập nhật</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- DEPOSIT MODAL -->
+<div class="modal-overlay" id="depositModal">
+    <div class="modal">
+        <h3>Nạp tiền vào ví</h3>
+        <form method="POST" action="{{ url_for('create_deposit') }}">
+            <div class="form-group">
+                <label>Số tiền nạp (VNĐ)</label>
+                <input type="number" name="amount" value="50000" min="10000" step="1000" required>
+            </div>
+            <p style="font-size:12px;color:var(--dim);margin-bottom:8px;">
+                Tối thiểu 10,000đ | Mỗi đánh giá = {{ "{:,}".format(review_price) }}đ
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline btn-sm" onclick="closeDepositModal()">Hủy</button>
+                <button type="submit" class="btn btn-success btn-sm">Tạo mã QR</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openDepositModal() {
+    document.getElementById('depositModal').classList.add('active');
+}
+function closeDepositModal() {
+    document.getElementById('depositModal').classList.remove('active');
+}
+function copyKey() {
+    const key = document.getElementById('api-key').textContent;
+    navigator.clipboard.writeText(key).then(() => {
+        const btn = event.target;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy Key', 1500);
+    });
+}
+function scrollTo(id) {
+    document.getElementById(id).scrollIntoView({behavior: 'smooth'});
+}
+document.getElementById('depositModal').addEventListener('click', function(e) {
+    if (e.target === this) closeDepositModal();
+});
+</script>
+{% endblock %}

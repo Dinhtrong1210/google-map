@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập{% endblock %}
+{% block body %}
+<div class="auth-container">
+    <div class="auth-box">
+        <h1>Review Bot</h1>
+        <p class="subtitle">Quản lý đánh giá Google Maps</p>
+
+        <form method="POST">
+            <div class="form-group">
+                <label>Username hoặc Email</label>
+                <input type="text" name="username" placeholder="Nhập username hoặc email" required autofocus>
+            </div>
+            <div class="form-group">
+                <label>Mật khẩu</label>
+                <input type="password" name="password" placeholder="Nhập mật khẩu" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Đăng nhập</button>
+        </form>
+
+        <div class="auth-link">
+            Chưa có tài khoản? <a href="{{ url_for('register') }}">Đăng ký ngay</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
