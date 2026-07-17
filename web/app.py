@@ -35,6 +35,8 @@ DATABASE = os.environ.get(
 SEPAY_API_KEY = os.environ.get('SEPAY_API_KEY', '')
 SEPAY_API_SECRET = os.environ.get('SEPAY_API_SECRET', '')
 SEPAY_ACCOUNT_ID = os.environ.get('SEPAY_ACCOUNT_ID', '')
+SEPAY_BANK_CODE = os.environ.get('SEPAY_BANK_CODE', 'STB')
+SEPAY_BANK_NAME = os.environ.get('SEPAY_BANK_NAME', 'Sacombank')
 
 REVIEW_PRICE = 12000
 
@@ -755,7 +757,7 @@ def tool_deposit():
     if SEPAY_ACCOUNT_ID:
         vietqr_url = (
             f"https://vietqr.app/img?acc={SEPAY_ACCOUNT_ID}"
-            f"&bank=Sacombank&amount={amount}"
+            f"&bank={SEPAY_BANK_CODE}&amount={amount}"
             f"&des={description}&showinfo=true"
         )
 
