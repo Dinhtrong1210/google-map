@@ -902,6 +902,12 @@ class ReviewBotApp:
                                             justify=tk.LEFT)
         self.deposit_info_label.pack(anchor=tk.W, pady=(8, 0))
 
+        self.btn_confirm_deposit = tk.Button(qr_inner, text="✅  Da thanh toan",
+                                               command=self._confirm_deposit, bg=COLORS['accent'], fg='#fff',
+                                               font=self.fonts['btn'], relief=tk.FLAT, padx=16, pady=6, cursor="hand2")
+        self.btn_confirm_deposit.pack(anchor=tk.W, pady=(10, 0))
+        self.btn_confirm_deposit.pack_forget()
+
         hist_frame = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
         hist_frame.pack(fill=tk.BOTH, expand=True, pady=(12, 0))
         hist_inner = tk.Frame(hist_frame, bg=COLORS['bg2'], padx=14, pady=10)
@@ -1012,10 +1018,29 @@ class ReviewBotApp:
                 info += f"{note}\n"
             info += "\nMo app ngan hang -> Quet QR -> Chuyen khoan"
             self.deposit_info_label.config(text=info)
+            self.btn_confirm_deposit.pack(anchor=tk.W, pady=(10, 0))
 
         except Exception as e:
             self.qr_label.config(text=f"Loi tao QR: {e}")
             self.deposit_info_label.config(text=f"So tien: {amount:,}d\nNoi dung: {description}")
+
+    def _confirm_deposit(self):
+        if not self.deposit_tx_id:
+            return
+        self.btn_confirm_deposit.config(state=tk.DISABLED, text="Dang xac nhan...")
+        self.root.update()
+        resp = api_call(f'/api/tool/confirm-deposit/{self.deposit_tx_id}', 'POST',
+                        token=self.token, server_url=self.server_url)
+        if resp.get('status') == 'completed':
+            self.deposit_status.config(
+                text=f"✅ Nap {resp.get('amount', 0):,}d thanh cong! So du duoc cap nhat.",
+                fg=COLORS['success'])
+            self.btn_confirm_deposit.config(text="Da xac nhan!")
+            self._refresh_balance()
+        else:
+            err = resp.get('error', 'Loi khong xac dinh')
+            self.deposit_status.config(text=f"Loi: {err}", fg=COLORS['error'])
+            self.btn_confirm_deposit.config(state=tk.NORMAL, text="✅  Da thanh toan")
 
     def _poll_deposit(self, tx_id):
         max_attempts = 120

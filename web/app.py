@@ -806,6 +806,31 @@ def tool_sepay_settings():
     })
 
 
+@app.route('/api/tool/confirm-deposit/<int:tx_id>', methods=['POST'])
+def tool_confirm_deposit(tx_id):
+    user_id = _tool_auth()
+    if not user_id:
+        return jsonify({'error': 'Session expired'}), 401
+
+    db = get_db()
+    tx = db.execute(
+        'SELECT * FROM transactions WHERE id = ? AND user_id = ? AND status = "pending" AND type = "deposit"',
+        (tx_id, user_id)
+    ).fetchone()
+    if not tx:
+        return jsonify({'error': 'Transaction not found or already processed'}), 404
+
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    db.execute(
+        'UPDATE transactions SET status = "completed", completed_at = ? WHERE id = ?', (now, tx_id)
+    )
+    db.execute(
+        'UPDATE users SET wallet_balance = wallet_balance + ? WHERE id = ?', (tx['amount'], user_id)
+    )
+    db.commit()
+    return jsonify({'status': 'completed', 'amount': tx['amount']})
+
+
 @app.route('/api/tool/history')
 def tool_history():
     user_id = _tool_auth()
