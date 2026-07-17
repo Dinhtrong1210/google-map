@@ -1,0 +1,19 @@
+services:
+  reviewbot:
+    build: .
+    container_name: reviewbot
+    restart: always
+    ports:
+      - "5000:8000"
+    environment:
+      - FLASK_SECRET=CHANGE_ME_TO_RANDOM_STRING
+      - DATABASE_PATH=/app/data/database.db
+      - SEPAY_API_KEY=
+      - SEPAY_API_SECRET=
+      - SEPAY_ACCOUNT_ID=
+    volumes:
+      - ./data:/app/data
+
+networks:
+  default:
+    name: reviewbot-net

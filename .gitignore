@@ -1,6 +1,7 @@
 # Sensitive credentials - contain real passwords
 accounts.txt
 config.json
+tool_config.json
 
 # Browser profile data (session cookies, login data)
 profiles/
@@ -17,3 +18,15 @@ debug_*.jpg
 
 # Logs
 review_log.json
+
+# Database (will be created on server)
+web/database.db
+
+# Python venv
+web/venv/
+
+# Images (local only)
+images/
+
+# Docker data
+data/
