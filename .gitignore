@@ -1,0 +1,19 @@
+# Sensitive credentials - contain real passwords
+accounts.txt
+config.json
+
+# Browser profile data (session cookies, login data)
+profiles/
+
+# Build artifacts
+build/
+dist/
+__pycache__/
+*.pyc
+
+# Debug screenshots
+debug_*.png
+debug_*.jpg
+
+# Logs
+review_log.json
