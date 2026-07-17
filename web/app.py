@@ -16,10 +16,6 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
-import qrcode
-import io
-import base64
-
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET', secrets.token_hex(32))
 
@@ -31,14 +27,6 @@ DATABASE = os.environ.get(
     'DATABASE_PATH',
     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
 )
-
-SEPAY_API_KEY = os.environ.get('SEPAY_API_KEY', '')
-SEPAY_API_SECRET = os.environ.get('SEPAY_API_SECRET', '')
-SEPAY_ACCOUNT_ID = os.environ.get('SEPAY_ACCOUNT_ID', '')
-SEPAY_BANK_CODE = os.environ.get('SEPAY_BANK_CODE', 'STB')
-SEPAY_BANK_NAME = os.environ.get('SEPAY_BANK_NAME', 'Sacombank')
-
-REVIEW_PRICE = 12000
 
 # In-memory token store for desktop tool API (token -> user_id)
 tool_tokens = {}
@@ -100,7 +88,7 @@ def init_db():
             place_url TEXT NOT NULL,
             comment TEXT DEFAULT '',
             stars INTEGER DEFAULT 5,
-            cost INTEGER DEFAULT 12000,
+            cost INTEGER DEFAULT 0,
             status TEXT DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
@@ -129,11 +117,6 @@ def init_db():
             'INSERT INTO users (username, email, password, fullname, role) VALUES (?, ?, ?, ?, ?)',
             ('admin', 'admin@admin.com', admin_pass, 'Administrator', 'admin')
         )
-
-    db.execute(
-        'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)',
-        ('review_price', str(REVIEW_PRICE))
-    )
 
     db.commit()
     db.close()
@@ -296,10 +279,6 @@ def dashboard():
         return redirect(url_for('admin_dashboard'))
 
     db = get_db()
-    transactions = db.execute(
-        'SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 20',
-        (current_user.id,)
-    ).fetchall()
     reviews = db.execute(
         'SELECT * FROM reviews WHERE user_id = ? ORDER BY created_at DESC LIMIT 20',
         (current_user.id,)
@@ -310,10 +289,8 @@ def dashboard():
     ).fetchone()
 
     return render_template('dashboard.html',
-                           transactions=transactions,
                            reviews=reviews,
-                           api_key=api_key['key'] if api_key else None,
-                           review_price=REVIEW_PRICE)
+                           api_key=api_key['key'] if api_key else None)
 
 
 @app.route('/profile/update', methods=['POST'])
@@ -340,138 +317,6 @@ def update_profile():
     return redirect(url_for('dashboard'))
 
 
-@app.route('/deposit', methods=['POST'])
-@login_required
-def create_deposit():
-    amount = request.form.get('amount', 0)
-    try:
-        amount = int(amount)
-    except (ValueError, TypeError):
-        flash('Số tiền không hợp lệ!', 'error')
-        return redirect(url_for('dashboard'))
-
-    if amount < 10000:
-        flash('Số tiền nạp tối thiểu 10,000đ!', 'error')
-        return redirect(url_for('dashboard'))
-
-    db = get_db()
-    cursor = db.execute(
-        'INSERT INTO transactions (user_id, amount, type, description, status) VALUES (?, ?, ?, ?, ?)',
-        (current_user.id, amount, 'deposit', f'Nạp {amount:,}đ qua QR', 'pending')
-    )
-    db.commit()
-    tx_id = cursor.lastrowid
-
-    return redirect(url_for('deposit_page', tx_id=tx_id))
-
-
-@app.route('/deposit/<int:tx_id>')
-@login_required
-def deposit_page(tx_id):
-    db = get_db()
-    tx = db.execute(
-        'SELECT * FROM transactions WHERE id = ? AND user_id = ?',
-        (tx_id, current_user.id)
-    ).fetchone()
-
-    if not tx:
-        flash('Giao dịch không tồn tại!', 'error')
-        return redirect(url_for('dashboard'))
-
-    qr_image = None
-    sepay_url = None
-
-    if SEPAY_API_KEY:
-        sepay_url = (
-            f"https://sandbox.sepay.vn/payment?account={SEPAY_ACCOUNT_ID}"
-            f"&amount={tx['amount']}&des=NAP{tx['id']}&sepay_api_key={SEPAY_API_KEY}"
-        )
-        qr = qrcode.QRCode(version=1, box_size=8, border=4)
-        qr.add_data(sepay_url)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        buf = io.BytesIO()
-        img.save(buf, format='PNG')
-        qr_image = base64.b64encode(buf.getvalue()).decode()
-    else:
-        qr_data = f"STK: {SEPAY_ACCOUNT_ID}\nNoi dung: NAP{tx['id']}\nSo tien: {tx['amount']:,}d"
-        qr = qrcode.QRCode(version=1, box_size=8, border=4)
-        qr.add_data(qr_data)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        buf = io.BytesIO()
-        img.save(buf, format='PNG')
-        qr_image = base64.b64encode(buf.getvalue()).decode()
-
-    return render_template('deposit.html', tx=tx, qr_image=qr_image, sepay_url=sepay_url)
-
-
-@app.route('/api/check-deposit/<int:tx_id>')
-@login_required
-def check_deposit(tx_id):
-    db = get_db()
-    tx = db.execute(
-        'SELECT status FROM transactions WHERE id = ? AND user_id = ?',
-        (tx_id, current_user.id)
-    ).fetchone()
-
-    if tx and tx['status'] == 'completed':
-        return jsonify({'status': 'completed'})
-    return jsonify({'status': 'pending'})
-
-
-# ==================== SEPAY WEBHOOK ====================
-
-@app.route('/api/sepay/webhook', methods=['POST'])
-def sepay_webhook():
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data'}), 400
-
-    sepay_id = str(data.get('id', ''))
-    amount = data.get('amount', 0)
-    des = data.get('description', '') or data.get('des', '')
-    status = data.get('status', '')
-
-    if status != 'success':
-        return jsonify({'status': 'ignored'}), 200
-
-    db = get_db()
-    tx_match = None
-
-    if des and 'NAP' in des.upper():
-        try:
-            tx_id_str = des.upper().replace('NAP', '').strip()
-            tx_id = int(tx_id_str)
-            tx_match = db.execute(
-                'SELECT * FROM transactions WHERE id = ? AND type = "deposit" AND status = "pending"',
-                (tx_id,)
-            ).fetchone()
-        except (ValueError, IndexError):
-            pass
-
-    if not tx_match:
-        tx_match = db.execute(
-            'SELECT * FROM transactions WHERE amount = ? AND type = "deposit" AND status = "pending" ORDER BY created_at DESC LIMIT 1',
-            (amount,)
-        ).fetchone()
-
-    if tx_match:
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        db.execute(
-            'UPDATE transactions SET status = "completed", sepay_id = ?, completed_at = ? WHERE id = ?',
-            (sepay_id, now, tx_match['id'])
-        )
-        db.execute(
-            'UPDATE users SET wallet_balance = wallet_balance + ? WHERE id = ?',
-            (amount, tx_match['user_id'])
-        )
-        db.commit()
-        return jsonify({'status': 'success', 'transaction_id': tx_match['id']}), 200
-
-    return jsonify({'status': 'no_match'}), 200
-
-
 # ==================== API CHO BOT ====================
 
 @app.route('/api/bot/verify', methods=['POST'])
@@ -495,9 +340,7 @@ def api_verify():
     return jsonify({
         'user_id': user['id'],
         'username': user['username'],
-        'balance': user['wallet_balance'],
-        'reviews_remaining': user['wallet_balance'] // REVIEW_PRICE,
-        'review_price': REVIEW_PRICE
+        'total_reviews': user['total_reviews'],
     })
 
 
@@ -517,22 +360,19 @@ def api_deduct():
 
     user_id = key_row['user_id']
     user = db.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
-    if not user or user['wallet_balance'] < REVIEW_PRICE:
-        return jsonify({'error': 'Insufficient balance', 'balance': user['wallet_balance'] if user else 0}), 402
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
 
-    db.execute('UPDATE users SET wallet_balance = wallet_balance - ? WHERE id = ?', (REVIEW_PRICE, user_id))
     db.execute(
         'INSERT INTO reviews (user_id, place_url, comment, stars, cost, status) VALUES (?, ?, ?, ?, ?, ?)',
-        (user_id, data.get('place_url', ''), data.get('comment', ''), data.get('stars', 5), REVIEW_PRICE, 'completed')
+        (user_id, data.get('place_url', ''), data.get('comment', ''), data.get('stars', 5), 0, 'completed')
     )
     db.execute('UPDATE users SET total_reviews = total_reviews + 1 WHERE id = ?', (user_id,))
     db.commit()
 
-    new_user = db.execute('SELECT wallet_balance FROM users WHERE id = ?', (user_id,)).fetchone()
     return jsonify({
         'status': 'success',
-        'balance': new_user['wallet_balance'],
-        'deducted': REVIEW_PRICE
+        'total_reviews': user['total_reviews'] + 1,
     })
 
 
@@ -551,8 +391,7 @@ def api_balance():
 
     user = db.execute('SELECT * FROM users WHERE id = ?', (key_row['user_id'],)).fetchone()
     return jsonify({
-        'balance': user['wallet_balance'],
-        'reviews_remaining': user['wallet_balance'] // REVIEW_PRICE
+        'total_reviews': user['total_reviews'],
     })
 
 
@@ -593,7 +432,6 @@ def tool_login():
             'username': row['username'],
             'email': row['email'],
             'fullname': row['fullname'],
-            'balance': row['wallet_balance'],
             'role': row['role'],
             'total_reviews': row['total_reviews']
         }
@@ -656,7 +494,6 @@ def tool_profile():
         'email': row['email'],
         'fullname': row['fullname'],
         'phone': row['phone'],
-        'balance': row['wallet_balance'],
         'role': row['role'],
         'total_reviews': row['total_reviews'],
         'is_active': row['is_active'],
@@ -681,11 +518,33 @@ def tool_refresh():
     ).fetchall()
 
     return jsonify({
-        'balance': row['wallet_balance'],
         'total_reviews': row['total_reviews'],
-        'reviews_remaining': row['wallet_balance'] // REVIEW_PRICE,
-        'review_price': REVIEW_PRICE,
         'history': [dict(r) for r in reviews]
+    })
+
+
+@app.route('/api/tool/review-done', methods=['POST'])
+def tool_review_done():
+    user_id = _tool_auth()
+    if not user_id:
+        return jsonify({'error': 'Session expired'}), 401
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data'}), 400
+
+    db = get_db()
+    db.execute(
+        'INSERT INTO reviews (user_id, place_url, comment, stars, cost, status) VALUES (?, ?, ?, ?, ?, ?)',
+        (user_id, data.get('place_url', ''), data.get('comment', ''), data.get('stars', 5), 0, 'completed')
+    )
+    db.execute('UPDATE users SET total_reviews = total_reviews + 1 WHERE id = ?', (user_id,))
+    db.commit()
+
+    row = db.execute('SELECT total_reviews FROM users WHERE id = ?', (user_id,)).fetchone()
+    return jsonify({
+        'status': 'success',
+        'total_reviews': row['total_reviews'],
     })
 
 
@@ -704,131 +563,18 @@ def tool_deduct():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    if user['wallet_balance'] < REVIEW_PRICE:
-        return jsonify({'error': 'So du khong du', 'balance': user['wallet_balance']}), 402
-
-    db.execute('UPDATE users SET wallet_balance = wallet_balance - ? WHERE id = ?', (REVIEW_PRICE, user_id))
     db.execute(
         'INSERT INTO reviews (user_id, place_url, comment, stars, cost, status) VALUES (?, ?, ?, ?, ?, ?)',
-        (user_id, data.get('place_url', ''), data.get('comment', ''), data.get('stars', 5), REVIEW_PRICE, 'completed')
+        (user_id, data.get('place_url', ''), data.get('comment', ''), data.get('stars', 5), 0, 'completed')
     )
     db.execute('UPDATE users SET total_reviews = total_reviews + 1 WHERE id = ?', (user_id,))
     db.commit()
 
-    new_user = db.execute('SELECT wallet_balance FROM users WHERE id = ?', (user_id,)).fetchone()
+    new_user = db.execute('SELECT total_reviews FROM users WHERE id = ?', (user_id,)).fetchone()
     return jsonify({
         'status': 'success',
-        'balance': new_user['wallet_balance'],
-        'deducted': REVIEW_PRICE,
-        'reviews_remaining': new_user['wallet_balance'] // REVIEW_PRICE
+        'total_reviews': new_user['total_reviews'],
     })
-
-
-@app.route('/api/tool/deposit', methods=['POST'])
-def tool_deposit():
-    user_id = _tool_auth()
-    if not user_id:
-        return jsonify({'error': 'Session expired'}), 401
-
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data'}), 400
-
-    try:
-        amount = int(data.get('amount', 0))
-    except (ValueError, TypeError):
-        return jsonify({'error': 'So tien khong hop le'}), 400
-
-    if amount < 10000:
-        return jsonify({'error': 'Toi thieu 10,000d'}), 400
-
-    db = get_db()
-    cursor = db.execute(
-        'INSERT INTO transactions (user_id, amount, type, description, status) VALUES (?, ?, ?, ?, ?)',
-        (user_id, amount, 'deposit', f'Nap {amount:,}d tu tool', 'pending')
-    )
-    db.commit()
-    tx_id = cursor.lastrowid
-
-    sepay_account = SEPAY_ACCOUNT_ID
-    description = f'NAP{tx_id}'
-    vietqr_url = None
-
-    if SEPAY_ACCOUNT_ID:
-        vietqr_url = (
-            f"https://vietqr.app/img?acc={SEPAY_ACCOUNT_ID}"
-            f"&bank={SEPAY_BANK_CODE}&amount={amount}"
-            f"&des={description}&showinfo=true"
-        )
-
-    return jsonify({
-        'transaction_id': tx_id,
-        'amount': amount,
-        'status': 'pending',
-        'vietqr_url': vietqr_url,
-        'sepay_account': sepay_account,
-        'description': description,
-        'note': f'Chuyen khoan {amount:,}d voi noi dung: {description}'
-    })
-
-
-@app.route('/api/tool/check-deposit/<int:tx_id>')
-def tool_check_deposit(tx_id):
-    user_id = _tool_auth()
-    if not user_id:
-        return jsonify({'error': 'Session expired'}), 401
-
-    db = get_db()
-    tx = db.execute(
-        'SELECT status, amount FROM transactions WHERE id = ? AND user_id = ?',
-        (tx_id, user_id)
-    ).fetchone()
-
-    if not tx:
-        return jsonify({'error': 'Not found'}), 404
-
-    return jsonify({
-        'status': tx['status'],
-        'amount': tx['amount']
-    })
-
-
-@app.route('/api/tool/sepay-settings')
-def tool_sepay_settings():
-    user_id = _tool_auth()
-    if not user_id:
-        return jsonify({'error': 'Session expired'}), 401
-
-    return jsonify({
-        'sepay_api_key': SEPAY_API_KEY,
-        'sepay_account_id': SEPAY_ACCOUNT_ID,
-        'has_sepay': bool(SEPAY_API_KEY and SEPAY_ACCOUNT_ID)
-    })
-
-
-@app.route('/api/tool/confirm-deposit/<int:tx_id>', methods=['POST'])
-def tool_confirm_deposit(tx_id):
-    user_id = _tool_auth()
-    if not user_id:
-        return jsonify({'error': 'Session expired'}), 401
-
-    db = get_db()
-    tx = db.execute(
-        'SELECT * FROM transactions WHERE id = ? AND user_id = ? AND status = "pending" AND type = "deposit"',
-        (tx_id, user_id)
-    ).fetchone()
-    if not tx:
-        return jsonify({'error': 'Transaction not found or already processed'}), 404
-
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    db.execute(
-        'UPDATE transactions SET status = "completed", completed_at = ? WHERE id = ?', (now, tx_id)
-    )
-    db.execute(
-        'UPDATE users SET wallet_balance = wallet_balance + ? WHERE id = ?', (tx['amount'], user_id)
-    )
-    db.commit()
-    return jsonify({'status': 'completed', 'amount': tx['amount']})
 
 
 @app.route('/api/tool/history')
@@ -841,13 +587,9 @@ def tool_history():
     reviews = db.execute(
         'SELECT * FROM reviews WHERE user_id = ? ORDER BY created_at DESC LIMIT 100', (user_id,)
     ).fetchall()
-    transactions = db.execute(
-        'SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 50', (user_id,)
-    ).fetchall()
 
     return jsonify({
-        'reviews': [dict(r) for r in reviews],
-        'transactions': [dict(t) for t in transactions]
+        'reviews': [dict(r) for r in reviews]
     })
 
 
@@ -880,33 +622,18 @@ def admin_dashboard():
 
     total_pages = max(1, (total_users_q + per_page - 1) // per_page)
 
-    transactions = db.execute(
-        'SELECT t.*, u.username FROM transactions t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC LIMIT 30'
-    ).fetchall()
     reviews = db.execute(
         'SELECT r.*, u.username FROM reviews r JOIN users u ON r.user_id = u.id ORDER BY r.created_at DESC LIMIT 30'
     ).fetchall()
 
     total_users_count = db.execute('SELECT COUNT(*) FROM users WHERE role = "user"').fetchone()[0]
     total_reviews = db.execute('SELECT COUNT(*) FROM reviews').fetchone()[0]
-    total_revenue = db.execute(
-        'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = "deposit" AND status = "completed"'
-    ).fetchone()[0]
-    total_balance = db.execute('SELECT COALESCE(SUM(wallet_balance), 0) FROM users').fetchone()[0]
-    pending_tx = db.execute(
-        'SELECT COUNT(*) FROM transactions WHERE status = "pending"'
-    ).fetchone()[0]
 
     return render_template('admin.html',
                            users=users,
-                           transactions=transactions,
                            reviews=reviews,
                            total_users=total_users_count,
                            total_reviews=total_reviews,
-                           total_revenue=total_revenue,
-                           total_balance=total_balance,
-                           pending_tx=pending_tx,
-                           review_price=REVIEW_PRICE,
                            search=search,
                            page=page,
                            total_pages=total_pages)

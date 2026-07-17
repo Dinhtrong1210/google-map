@@ -13,23 +13,10 @@ import time
 import random
 import urllib.request
 import urllib.error
-import tempfile
 from datetime import datetime
 from review_bot import GoogleMapsReviewBot
 
-try:
-    import qrcode
-    HAS_QRCODE = True
-except ImportError:
-    HAS_QRCODE = False
-
-try:
-    from PIL import Image, ImageTk
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
-
-VERSION = "3.0.0"
+VERSION = "4.0.0"
 CONFIG_FILE = "tool_config.json"
 PROFILES_DIR = os.path.join(os.getcwd(), "profiles")
 
@@ -100,10 +87,7 @@ class ReviewBotApp:
 
         self.google_accounts = []
         self.google_accounts_status = {}
-        self.sepay_api_key = ''
-        self.sepay_account_id = ''
-        self.deposit_polling = False
-        self.deposit_tx_id = None
+        self.review_count = 0
 
         self._load_config()
         self._show_login_screen()
@@ -133,8 +117,7 @@ class ReviewBotApp:
                 self.token = cfg.get('token')
                 self.google_accounts = cfg.get('google_accounts', [])
                 self.google_accounts_status = cfg.get('google_accounts_status', {})
-                self.sepay_api_key = cfg.get('sepay_api_key', '')
-                self.sepay_account_id = cfg.get('sepay_account_id', '')
+                self.review_count = cfg.get('review_count', 0)
         except:
             pass
         self._check_all_profile_sessions()
@@ -146,8 +129,7 @@ class ReviewBotApp:
                 'token': self.token,
                 'google_accounts': self.google_accounts,
                 'google_accounts_status': self.google_accounts_status,
-                'sepay_api_key': self.sepay_api_key,
-                'sepay_account_id': self.sepay_account_id,
+                'review_count': self.review_count,
             }
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
@@ -280,9 +262,8 @@ class ReviewBotApp:
 
         self.sidebar_btns = {}
         menu_items = [
-            ('home', '🏠  Home'),
+            ('home', '🏠  Danh gia'),
             ('google_accounts', '📧  Tai khoan GG'),
-            ('nap_tien', '💰  Nap tien'),
             ('history', '📋  Lich su'),
             ('account', '👤  Tai khoan'),
             ('stats', '📊  Thong ke'),
@@ -299,9 +280,9 @@ class ReviewBotApp:
         sep2 = tk.Frame(sidebar, bg=COLORS['border'], height=1)
         sep2.pack(fill=tk.X, padx=12, pady=12)
 
-        self.sidebar_balance = tk.Label(sidebar, text="", font=self.fonts['small'],
-                                         fg=COLORS['success'], bg=COLORS['sidebar'], anchor=tk.W, padx=16)
-        self.sidebar_balance.pack(fill=tk.X)
+        self.sidebar_stats = tk.Label(sidebar, text="", font=self.fonts['small'],
+                                       fg=COLORS['accent'], bg=COLORS['sidebar'], anchor=tk.W, padx=16)
+        self.sidebar_stats.pack(fill=tk.X)
 
         bottom = tk.Frame(sidebar, bg=COLORS['sidebar'])
         bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=12, pady=12)
@@ -313,14 +294,14 @@ class ReviewBotApp:
         self.main_area = tk.Frame(self.root, bg=COLORS['bg'])
         self.main_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self._update_sidebar_balance()
+        self._update_sidebar_stats()
         self._navigate('home')
 
-    def _update_sidebar_balance(self):
-        if self.user_info:
-            bal = self.user_info.get('balance', 0)
-            remaining = bal // 12000
-            self.sidebar_balance.config(text=f"Vi: {bal:,}d\nCon lai: {remaining} danh gia")
+    def _update_sidebar_stats(self):
+        acc_count = len(self.google_accounts)
+        logged_in = sum(1 for v in self.google_accounts_status.values() if v)
+        self.sidebar_stats.config(
+            text=f"GG accounts: {acc_count} ({logged_in} active)\nDa danh gia: {self.review_count}")
 
     def _navigate(self, page):
         self.current_page = page
@@ -337,8 +318,6 @@ class ReviewBotApp:
             self._build_home_page()
         elif page == 'google_accounts':
             self._build_google_accounts_page()
-        elif page == 'nap_tien':
-            self._build_nap_tien_page()
         elif page == 'history':
             self._build_history_page()
         elif page == 'account':
@@ -361,7 +340,7 @@ class ReviewBotApp:
 
         tk.Label(page, text="Chay danh gia", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W)
-        tk.Label(page, text=f"Vi: {self.user_info.get('balance', 0):,}d | Con lai: {self.user_info.get('balance', 0) // 12000} danh gia",
+        tk.Label(page, text=f"Da danh gia: {self.review_count} | Tai khoan GG: {len(self.google_accounts)}",
                  font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(2, 12))
 
         sec1 = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
@@ -562,6 +541,7 @@ class ReviewBotApp:
                 'last_stars': self.star_var.get() if hasattr(self, 'star_var') else 5,
                 'last_chrome_count': self.chrome_count.get() if hasattr(self, 'chrome_count') else 1,
                 'last_comments': self.comment_text.get('1.0', tk.END).strip() if hasattr(self, 'comment_text') else '',
+                'review_count': self.review_count,
             }
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
@@ -577,6 +557,7 @@ class ReviewBotApp:
                 with open(CONFIG_FILE, 'r') as f:
                     cfg = json.load(f)
                 self.google_accounts = cfg.get('google_accounts', [])
+                self.review_count = cfg.get('review_count', 0)
                 self._check_all_profile_sessions()
 
                 if hasattr(self, 'url_entry'):
@@ -611,13 +592,6 @@ class ReviewBotApp:
             self.log_text.see(tk.END)
         self.root.after(0, _do)
 
-    def _refresh_balance(self):
-        resp = api_call('/api/tool/refresh', 'GET', token=self.token, server_url=self.server_url)
-        if 'error' not in resp:
-            self.user_info['balance'] = resp.get('balance', 0)
-            self.user_info['total_reviews'] = resp.get('total_reviews', 0)
-            self._update_sidebar_balance()
-
     def _start_review(self):
         url = self.url_entry.get().strip()
         raw = self.comment_text.get('1.0', tk.END).strip()
@@ -640,14 +614,7 @@ class ReviewBotApp:
             messagebox.showerror("Loi", "Nhap it nhat 1 tai khoan Google!\nVao trang 'Tai khoan GG' de them.")
             return
 
-        self._refresh_balance()
-        balance = self.user_info.get('balance', 0)
-        needed = 12000
-        if balance < needed:
-            messagebox.showerror("Loi", f"So du khong du!\nHien tai: {balance:,}d\nCan: {needed:,}d\n\nVui long nap them tai web.")
-            return
-
-        if not messagebox.askyesno("Xac nhan", f"Chay {chrome_count} Chrome voi {len(comment_lines)} noi dung?\n{len(self.google_accounts)} tai khoan GG | So du: {balance:,}d"):
+        if not messagebox.askyesno("Xac nhan", f"Chay {chrome_count} Chrome voi {len(comment_lines)} noi dung?\n{len(self.google_accounts)} tai khoan GG"):
             return
 
         self.log_text.delete('1.0', tk.END)
@@ -668,13 +635,6 @@ class ReviewBotApp:
             random.shuffle(shuffled_comments)
             shuffled_accounts = self.google_accounts[:]
             random.shuffle(shuffled_accounts)
-
-            resp = api_call('/api/tool/profile', 'GET', token=self.token, server_url=self.server_url)
-            if 'error' in resp:
-                self._log(f"Loi kiem tra tai khoan: {resp['error']}", True)
-                return
-
-            self._log(f"Tai khoan: {resp.get('username')} | So du: {resp.get('balance'):,}d")
 
             for j in range(chrome_count):
                 if self._stop_event.is_set():
@@ -702,22 +662,6 @@ class ReviewBotApp:
                 def run_one(c_idx, c_comment, c_email, c_password, c_profile_dir, c_already_logged):
                     bot = None
                     try:
-                        self._refresh_balance()
-                        if self.user_info.get('balance', 0) < 12000:
-                            self._log("So du khong du! Dung.", True)
-                            return
-
-                        deduct_resp = api_call('/api/tool/deduct', 'POST',
-                                               {'place_url': url, 'comment': c_comment, 'stars': stars},
-                                               token=self.token, server_url=self.server_url)
-                        if 'error' in deduct_resp:
-                            self._log(f"Loi tru tien: {deduct_resp['error']}", True)
-                            return
-
-                        self.user_info['balance'] = deduct_resp.get('balance', 0)
-                        self._update_sidebar_balance()
-                        self._log(f"  Da tru 12,000d | Con lai: {deduct_resp.get('balance', 0):,}d")
-
                         bot = GoogleMapsReviewBot(
                             headless=False,
                             user_data_dir=c_profile_dir,
@@ -766,6 +710,11 @@ class ReviewBotApp:
                             return
 
                         self._log(f"  HOAN THANH!")
+                        self.review_count += 1
+                        self._save_config()
+                        api_call('/api/tool/review-done', 'POST',
+                                 {'place_url': url, 'comment': c_comment, 'stars': stars},
+                                 token=self.token, server_url=self.server_url)
 
                     except Exception as e:
                         self._log(f"  Loi: {e}", True)
@@ -782,8 +731,7 @@ class ReviewBotApp:
                 time.sleep(3)
 
             self._log("\n" + "=" * 40)
-            self._log("HOAN TAT TAT CA!")
-            self._refresh_balance()
+            self._log(f"HOAN TAT! Tong da danh gia: {self.review_count}")
 
         except Exception as e:
             self._log(f"Loi chinh: {e}", True)
@@ -807,278 +755,6 @@ class ReviewBotApp:
 
     def _kill_chrome(self):
         os.system('taskkill /f /im chrome.exe 2>nul')
-
-    # ==================== NAP TIEN PAGE ====================
-
-    def _build_nap_tien_page(self):
-        page = tk.Frame(self.main_area, bg=COLORS['bg'])
-        page.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
-
-        tk.Label(page, text="Nap tien", font=self.fonts['title'],
-                 fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(0, 4))
-
-        bal = self.user_info.get('balance', 0)
-        tk.Label(page, text=f"So du hien tai: {bal:,}d  |  Con lai: {bal // 12000} danh gia",
-                 font=self.fonts['small'], fg=COLORS['accent'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(0, 12))
-
-        top_row = tk.Frame(page, bg=COLORS['bg'])
-        top_row.pack(fill=tk.X, pady=(0, 12))
-
-        left_col = tk.Frame(top_row, bg=COLORS['bg'])
-        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        amt_frame = tk.Frame(left_col, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
-        amt_frame.pack(fill=tk.X, pady=(0, 10))
-        amt_inner = tk.Frame(amt_frame, bg=COLORS['bg2'], padx=14, pady=12)
-        amt_inner.pack(fill=tk.X)
-
-        tk.Label(amt_inner, text="So tien nap (VND):", font=self.fonts['small'],
-                 fg=COLORS['dim'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X)
-
-        preset_row = tk.Frame(amt_inner, bg=COLORS['bg2'])
-        preset_row.pack(fill=tk.X, pady=(6, 4))
-
-        self.deposit_amount = tk.StringVar(value="50000")
-        for amt in ["10000", "20000", "50000", "100000", "200000", "500000"]:
-            tk.Button(preset_row, text=f"{int(amt):,}d",
-                      command=lambda a=amt: self.deposit_amount.set(a),
-                      bg=COLORS['bg3'], fg=COLORS['fg'], font=self.fonts['tiny'],
-                      relief=tk.FLAT, padx=8, pady=3, cursor="hand2").pack(side=tk.LEFT, padx=(0, 4))
-
-        self.amt_entry = tk.Entry(amt_inner, textvariable=self.deposit_amount,
-                                   bg=COLORS['bg3'], fg=COLORS['fg'],
-                                   insertbackground=COLORS['fg'], font=self.fonts['body'],
-                                   relief=tk.FLAT)
-        self.amt_entry.pack(fill=tk.X, ipady=6, pady=(4, 8))
-
-        btn_row = tk.Frame(amt_inner, bg=COLORS['bg2'])
-        btn_row.pack(fill=tk.X)
-
-        self.btn_deposit = tk.Button(btn_row, text="💰  Tao ma QR nap tien",
-                                      command=self._create_deposit, bg=COLORS['success'], fg='#000',
-                                      font=self.fonts['btn'], relief=tk.FLAT, padx=16, pady=6, cursor="hand2")
-        self.btn_deposit.pack(side=tk.LEFT)
-
-        self.deposit_status = tk.Label(amt_inner, text="", font=self.fonts['small'],
-                                        fg=COLORS['dim'], bg=COLORS['bg2'])
-        self.deposit_status.pack(anchor=tk.W, pady=(6, 0))
-
-        info_frame = tk.Frame(left_col, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
-        info_frame.pack(fill=tk.X)
-        info_inner = tk.Frame(info_frame, bg=COLORS['bg2'], padx=14, pady=10)
-        info_inner.pack(fill=tk.X)
-
-        tk.Label(info_inner, text="Huong dan:", font=self.fonts['heading'],
-                 fg=COLORS['accent'], bg=COLORS['bg2']).pack(anchor=tk.W, pady=(0, 4))
-
-        steps = [
-            "1. Nhap so tien va nhan 'Tao ma QR'",
-            "2. Quet ma QR de thanh toan",
-            "3. Noi dung chuyen khoan phai dung: NAP<so>",
-            "4. He thong se tu dong kiem tra va nap tien",
-            "5. Neu Sepay chua setup, dung chuyen khoan truc tiep",
-        ]
-        for step in steps:
-            tk.Label(info_inner, text=step, font=self.fonts['tiny'],
-                     fg=COLORS['dim'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X)
-
-        right_col = tk.Frame(top_row, bg=COLORS['bg'])
-        right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(12, 0))
-
-        qr_frame = tk.Frame(right_col, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
-        qr_frame.pack(fill=tk.BOTH, expand=True)
-        qr_inner = tk.Frame(qr_frame, bg=COLORS['bg2'], padx=14, pady=14)
-        qr_inner.pack(fill=tk.BOTH, expand=True)
-
-        tk.Label(qr_inner, text="Ma QR thanh toan", font=self.fonts['heading'],
-                 fg=COLORS['accent'], bg=COLORS['bg2']).pack(anchor=tk.W, pady=(0, 8))
-
-        self.qr_label = tk.Label(qr_inner, text="Chua tao ma QR",
-                                  font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg2'])
-        self.qr_label.pack(expand=True)
-
-        self.deposit_info_label = tk.Label(qr_inner, text="",
-                                            font=self.fonts['tiny'], fg=COLORS['fg'], bg=COLORS['bg2'],
-                                            justify=tk.LEFT)
-        self.deposit_info_label.pack(anchor=tk.W, pady=(8, 0))
-
-        self.btn_confirm_deposit = tk.Button(qr_inner, text="✅  Da thanh toan",
-                                               command=self._confirm_deposit, bg=COLORS['accent'], fg='#fff',
-                                               font=self.fonts['btn'], relief=tk.FLAT, padx=16, pady=6, cursor="hand2")
-        self.btn_confirm_deposit.pack(anchor=tk.W, pady=(10, 0))
-        self.btn_confirm_deposit.pack_forget()
-
-        hist_frame = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
-        hist_frame.pack(fill=tk.BOTH, expand=True, pady=(12, 0))
-        hist_inner = tk.Frame(hist_frame, bg=COLORS['bg2'], padx=14, pady=10)
-        hist_inner.pack(fill=tk.BOTH, expand=True)
-
-        tk.Label(hist_inner, text="Lich su giao dich", font=self.fonts['heading'],
-                 fg=COLORS['accent'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(0, 6))
-
-        resp = api_call('/api/tool/history', 'GET', token=self.token, server_url=self.server_url)
-        if 'error' not in resp:
-            transactions = resp.get('transactions', [])
-            if transactions:
-                for tx in transactions[:10]:
-                    row = tk.Frame(hist_inner, bg=COLORS['bg3'], padx=10, pady=5)
-                    row.pack(fill=tk.X, pady=1)
-                    status = tx.get('status', '')
-                    s_color = COLORS['success'] if status == 'completed' else COLORS['warning']
-                    tk.Label(row, text=tx.get('created_at', '')[:16], font=self.fonts['tiny'],
-                             fg=COLORS['dim'], bg=COLORS['bg3'], width=16, anchor=tk.W).pack(side=tk.LEFT)
-                    tk.Label(row, text=tx.get('description', ''), font=self.fonts['small'],
-                             fg=COLORS['fg'], bg=COLORS['bg3'], anchor=tk.W).pack(side=tk.LEFT, padx=8)
-                    tk.Label(row, text=f"{tx.get('amount', 0):,}d", font=self.fonts['small'],
-                             fg=COLORS['accent'], bg=COLORS['bg3']).pack(side=tk.RIGHT, padx=(8, 0))
-                    tk.Label(row, text=status, font=self.fonts['tiny'],
-                             fg=s_color, bg=COLORS['bg3'], width=10).pack(side=tk.RIGHT)
-            else:
-                tk.Label(hist_inner, text="Chua co giao dich nao", font=self.fonts['small'],
-                         fg=COLORS['dim'], bg=COLORS['bg2']).pack(pady=10)
-        else:
-            tk.Label(hist_inner, text="Khong the tai lich su", font=self.fonts['small'],
-                     fg=COLORS['error'], bg=COLORS['bg2']).pack(pady=10)
-
-    def _create_deposit(self):
-        try:
-            amount = int(self.deposit_amount.get())
-        except ValueError:
-            self.deposit_status.config(text="So tien khong hop le!", fg=COLORS['error'])
-            return
-
-        if amount < 10000:
-            self.deposit_status.config(text="Toi thieu 10,000d!", fg=COLORS['error'])
-            return
-
-        self.deposit_status.config(text="Dang tao giao dich...", fg=COLORS['warning'])
-        self.btn_deposit.config(state=tk.DISABLED)
-        self.root.update()
-
-        resp = api_call('/api/tool/deposit', 'POST', {'amount': amount},
-                        token=self.token, server_url=self.server_url)
-
-        if 'error' in resp:
-            self.deposit_status.config(text=f"Loi: {resp['error']}", fg=COLORS['error'])
-            self.btn_deposit.config(state=tk.NORMAL)
-            return
-
-        tx_id = resp.get('transaction_id')
-        self.deposit_tx_id = tx_id
-        sepay_url = resp.get('vietqr_url')
-        description = resp.get('description', f'NAP{tx_id}')
-        note = resp.get('note', '')
-
-        qr_data = sepay_url if sepay_url else f"STK: {resp.get('sepay_account', 'N/A')}\nND: {description}\nSo tien: {amount:,}d"
-
-        self._display_qr(qr_data, amount, description, note)
-
-        self.deposit_status.config(
-            text=f"Giao dich #{tx_id} da tao! Dang kiem tra tu dong...",
-            fg=COLORS['success'])
-        self.btn_deposit.config(state=tk.NORMAL)
-
-        self.deposit_polling = True
-        poll_thread = threading.Thread(target=self._poll_deposit, args=(tx_id,))
-        poll_thread.daemon = True
-        poll_thread.start()
-
-    def _display_qr(self, qr_data, amount, description, note):
-        qr_dir = os.path.join(os.getcwd(), "temp")
-        os.makedirs(qr_dir, exist_ok=True)
-        qr_path = os.path.join(qr_dir, f"deposit_qr_{self.deposit_tx_id}.png")
-
-        try:
-            if qr_data.startswith('http'):
-                import urllib.request as urlreq
-                urlreq.urlretrieve(qr_data, qr_path)
-            elif HAS_QRCODE:
-                qr = qrcode.QRCode(version=1, box_size=6, border=3)
-                qr.add_data(qr_data)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white")
-                img.save(qr_path)
-            else:
-                self.qr_label.config(text="Khong the tao QR")
-                return
-
-            if HAS_PIL and os.path.exists(qr_path):
-                pil_img = Image.open(qr_path)
-                pil_img = pil_img.resize((280, 280), Image.LANCZOS)
-                self._qr_photo = ImageTk.PhotoImage(pil_img)
-                self.qr_label.config(image=self._qr_photo, text="")
-            elif os.path.exists(qr_path):
-                self.qr_label.config(text=f"[QR saved: {qr_path}]")
-            else:
-                self.qr_label.config(text="Khong the tao QR")
-
-            info = f"So tien: {amount:,}d\n"
-            info += f"Noi dung: {description}\n"
-            if note:
-                info += f"{note}\n"
-            info += "\nMo app ngan hang -> Quet QR -> Chuyen khoan"
-            self.deposit_info_label.config(text=info)
-            self.btn_confirm_deposit.pack(anchor=tk.W, pady=(10, 0))
-
-        except Exception as e:
-            self.qr_label.config(text=f"Loi tao QR: {e}")
-            self.deposit_info_label.config(text=f"So tien: {amount:,}d\nNoi dung: {description}")
-
-    def _confirm_deposit(self):
-        if not self.deposit_tx_id:
-            return
-        self.btn_confirm_deposit.config(state=tk.DISABLED, text="Dang xac nhan...")
-        self.root.update()
-        resp = api_call(f'/api/tool/confirm-deposit/{self.deposit_tx_id}', 'POST',
-                        token=self.token, server_url=self.server_url)
-        if resp.get('status') == 'completed':
-            self.deposit_status.config(
-                text=f"✅ Nap {resp.get('amount', 0):,}d thanh cong! So du duoc cap nhat.",
-                fg=COLORS['success'])
-            self.btn_confirm_deposit.config(text="Da xac nhan!")
-            self._refresh_balance()
-        else:
-            err = resp.get('error', 'Loi khong xac dinh')
-            self.deposit_status.config(text=f"Loi: {err}", fg=COLORS['error'])
-            self.btn_confirm_deposit.config(state=tk.NORMAL, text="✅  Da thanh toan")
-
-    def _poll_deposit(self, tx_id):
-        max_attempts = 120
-        attempt = 0
-        while self.deposit_polling and attempt < max_attempts:
-            time.sleep(5)
-            attempt += 1
-
-            resp = api_call(f'/api/tool/check-deposit/{tx_id}', 'GET',
-                            token=self.token, server_url=self.server_url)
-
-            if 'error' not in resp and resp.get('status') == 'completed':
-                self.deposit_polling = False
-                self.root.after(0, lambda: self._deposit_completed(tx_id, resp.get('amount', 0)))
-                return
-
-        self.deposit_polling = False
-        self.root.after(0, lambda: self.deposit_status.config(
-            text=f"Giao dich #{tx_id}: Dang cho thanh toan. Quay lai sau de kiem tra.",
-            fg=COLORS['warning']))
-
-    def _deposit_completed(self, tx_id, amount):
-        self.deposit_status.config(
-            text=f"Thanh cong! Da nap {amount:,}d (GD #{tx_id})",
-            fg=COLORS['success'])
-        self._refresh_balance()
-        self._cleanup_qr_files()
-        messagebox.showinfo("Thanh cong", f"Da nap {amount:,}d thanh cong!")
-
-    def _cleanup_qr_files(self):
-        try:
-            qr_dir = os.path.join(os.getcwd(), "temp")
-            if os.path.exists(qr_dir):
-                for f in os.listdir(qr_dir):
-                    if f.startswith("deposit_qr_"):
-                        os.remove(os.path.join(qr_dir, f))
-        except:
-            pass
 
     # ==================== GOOGLE ACCOUNTS PAGE ====================
 
@@ -1323,14 +999,14 @@ class ReviewBotApp:
             return
 
         reviews = resp.get('reviews', [])
-        transactions = resp.get('transactions', [])
 
         sec = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
         sec.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         sec_inner = tk.Frame(sec, bg=COLORS['bg2'], padx=10, pady=10)
         sec_inner.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(sec_inner, text="Danh gia gan day", font=self.fonts['heading'],
+        tk.Label(sec_inner, text=f"Danh gia gan day ({len(reviews)} phan tu)",
+                 font=self.fonts['heading'],
                  fg=COLORS['accent'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(0, 6))
 
         style = ttk.Style()
@@ -1340,25 +1016,22 @@ class ReviewBotApp:
         style.configure("Hist.Treeview.Heading", background=COLORS['bg4'], foreground=COLORS['fg'],
                         font=self.fonts['small'])
 
-        cols = ("time", "url", "stars", "cost", "status")
+        cols = ("time", "url", "stars", "status")
         tree = ttk.Treeview(sec_inner, columns=cols, show="headings", style="Hist.Treeview", height=12)
         tree.heading("time", text="Thoi gian")
         tree.heading("url", text="Dia diem")
         tree.heading("stars", text="Sao")
-        tree.heading("cost", text="Chi phi")
         tree.heading("status", text="Trang thai")
         tree.column("time", width=140)
-        tree.column("url", width=300)
+        tree.column("url", width=400)
         tree.column("stars", width=60)
-        tree.column("cost", width=90)
         tree.column("status", width=80)
 
         for r in reviews:
             tree.insert("", tk.END, values=(
                 r.get('created_at', ''),
-                r.get('place_url', '')[:50],
+                r.get('place_url', '')[:60],
                 '⭐' * r.get('stars', 5),
-                f"{r.get('cost', 0):,}d",
                 r.get('status', '')
             ))
 
@@ -1394,31 +1067,16 @@ class ReviewBotApp:
             ("Vai tro", resp.get('role', '')),
             ("Ngay tao", resp.get('created_at', '')),
             ("Tong danh gia", str(resp.get('total_reviews', 0))),
+            ("Da danh gia (tool)", str(self.review_count)),
         ]
 
         for label, value in fields:
             row = tk.Frame(info_inner, bg=COLORS['bg2'])
             row.pack(fill=tk.X, pady=3)
             tk.Label(row, text=f"{label}:", font=self.fonts['small'], fg=COLORS['dim'],
-                     bg=COLORS['bg2'], width=14, anchor=tk.W).pack(side=tk.LEFT)
+                     bg=COLORS['bg2'], width=16, anchor=tk.W).pack(side=tk.LEFT)
             tk.Label(row, text=value, font=self.fonts['body'], fg=COLORS['fg'],
                      bg=COLORS['bg2'], anchor=tk.W).pack(side=tk.LEFT)
-
-        wallet_frame = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['accent'], highlightthickness=1)
-        wallet_frame.pack(fill=tk.X, pady=(0, 12))
-        wallet_inner = tk.Frame(wallet_frame, bg=COLORS['bg2'], padx=20, pady=16)
-        wallet_inner.pack(fill=tk.X)
-
-        tk.Label(wallet_inner, text="So du vi", font=self.fonts['small'],
-                 fg=COLORS['dim'], bg=COLORS['bg2']).pack(anchor=tk.W)
-        tk.Label(wallet_inner, text=f"{resp.get('balance', 0):,}d", font=self.fonts['big'],
-                 fg=COLORS['accent'], bg=COLORS['bg2']).pack(anchor=tk.W)
-        tk.Label(wallet_inner, text=f"Con lai: {resp.get('balance', 0) // 12000} danh gia (12,000d/danh gia)",
-                 font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg2']).pack(anchor=tk.W, pady=(4, 0))
-
-        tk.Button(page, text="Nap tien tai web", command=lambda: os.system(f"start {self.server_url}"),
-                  bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
-                  relief=tk.FLAT, padx=16, pady=6, cursor="hand2").pack(anchor=tk.W, pady=(8, 0))
 
     # ==================== STATS PAGE ====================
 
@@ -1435,10 +1093,10 @@ class ReviewBotApp:
             return
 
         stats = [
-            ("So du vi", f"{resp.get('balance', 0):,}d", COLORS['accent']),
-            ("Danh gia con lai", str(resp.get('reviews_remaining', 0)), COLORS['success']),
-            ("Tong da danh gia", str(resp.get('total_reviews', 0)), COLORS['warning']),
-            ("Gia / danh gia", f"{resp.get('review_price', 12000):,}d", COLORS['dim']),
+            ("Tong da danh gia (server)", str(resp.get('total_reviews', 0)), COLORS['accent']),
+            ("Da danh gia (tool)", str(self.review_count), COLORS['success']),
+            ("Tai khoan GG", str(len(self.google_accounts)), COLORS['warning']),
+            ("Session hoat dong", str(sum(1 for v in self.google_accounts_status.values() if v)), COLORS['star']),
         ]
 
         grid = tk.Frame(page, bg=COLORS['bg'])
@@ -1475,7 +1133,7 @@ class ReviewBotApp:
                              fg=COLORS['dim'], bg=COLORS['bg3'], width=16, anchor=tk.W).pack(side=tk.LEFT)
                     tk.Label(row, text=r.get('place_url', '')[:40], font=self.fonts['small'],
                              fg=COLORS['fg'], bg=COLORS['bg3'], anchor=tk.W).pack(side=tk.LEFT, padx=8)
-                    tk.Label(row, text=f"{'⭐'*r.get('stars',5)} {r.get('cost',0):,}d",
+                    tk.Label(row, text=f"{'⭐'*r.get('stars',5)}",
                              font=self.fonts['small'], fg=COLORS['accent'], bg=COLORS['bg3']).pack(side=tk.RIGHT)
 
 

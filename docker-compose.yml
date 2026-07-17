@@ -8,11 +8,6 @@ services:
     environment:
       - FLASK_SECRET=CHANGE_ME_TO_RANDOM_STRING
       - DATABASE_PATH=/app/data/database.db
-      - SEPAY_API_KEY=RPCNXBH0ND3SW6EVAR8CPXTIWKQ4GOGYH1VY9SSCWBJI2ZQRJUX35SFJ4YUN9DYL
-      - SEPAY_API_SECRET=
-      - SEPAY_ACCOUNT_ID=220208888888
-      - SEPAY_BANK_CODE=MB
-      - SEPAY_BANK_NAME=MBBank
     volumes:
       - ./data:/app/data
 

@@ -14,12 +14,6 @@
             <a href="#users-section" onclick="scrollTo('users-section')">
                 <span class="icon">👥</span> Người dùng
             </a>
-            <a href="#transactions-section" onclick="scrollTo('transactions-section')">
-                <span class="icon">💰</span> Giao dịch
-                {% if pending_tx > 0 %}
-                <span class="badge badge-warning" style="margin-left:auto;">{{ pending_tx }}</span>
-                {% endif %}
-            </a>
             <a href="#reviews-section" onclick="scrollTo('reviews-section')">
                 <span class="icon">⭐</span> Đánh giá
             </a>
@@ -34,7 +28,7 @@
     <div class="main-content">
         <div class="page-header">
             <h1>Admin Dashboard</h1>
-            <p>Quản lý người dùng, ví tiền và đánh giá</p>
+            <p>Quản lý người dùng và đánh giá</p>
         </div>
 
         <div class="stats-grid">
@@ -45,14 +39,6 @@
             <div class="stat-card success">
                 <div class="number">{{ total_reviews }}</div>
                 <div class="label">Tổng đánh giá</div>
-            </div>
-            <div class="stat-card warning">
-                <div class="number">{{ "{:,}".format(total_revenue) }}đ</div>
-                <div class="label">Tổng thu</div>
-            </div>
-            <div class="stat-card error">
-                <div class="number">{{ "{:,}".format(total_balance) }}đ</div>
-                <div class="label">Tổng số dư</div>
             </div>
         </div>
 
@@ -79,7 +65,6 @@
                                 <th>Username</th>
                                 <th>Email</th>
                                 <th>SĐT</th>
-                                <th>Số dư</th>
                                 <th>Đánh giá</th>
                                 <th>Vai trò</th>
                                 <th>Trạng thái</th>
@@ -94,7 +79,6 @@
                                 <td style="font-weight:600;">{{ u.username }}</td>
                                 <td>{{ u.email }}</td>
                                 <td>{{ u.phone or '-' }}</td>
-                                <td style="color:var(--accent);font-weight:600;">{{ "{:,}".format(u.wallet_balance) }}đ</td>
                                 <td>{{ u.total_reviews }}</td>
                                 <td>
                                     {% if u.role == 'admin' %}
@@ -113,8 +97,7 @@
                                 <td style="font-size:11px;color:var(--dim);">{{ u.last_login or '-' }}</td>
                                 <td style="white-space:nowrap;">
                                     {% if u.role != 'admin' %}
-                                    <button class="btn btn-sm btn-accent" onclick="openEditUser({{ u.id }}, '{{ u.username }}', '{{ u.email }}', '{{ u.fullname }}', '{{ u.phone }}', {{ u.wallet_balance }}, '{{ u.role }}')">Sửa</button>
-                                    <button class="btn btn-sm btn-success" onclick="openTopupModal({{ u.id }}, '{{ u.username }}')">Nạp</button>
+                                    <button class="btn btn-sm btn-accent" onclick="openEditUser({{ u.id }}, '{{ u.username }}', '{{ u.email }}', '{{ u.fullname }}', '{{ u.phone }}', '{{ u.role }}')">Sửa</button>
                                     <button class="btn btn-sm btn-outline" onclick="genKey({{ u.id }})">Key</button>
                                     <button class="btn btn-sm btn-warning" onclick="toggleUser({{ u.id }})">
                                         {{ 'Khóa' if u.is_active else 'Mở' }}
@@ -127,7 +110,7 @@
                             </tr>
                             {% endfor %}
                             {% if not users %}
-                            <tr><td colspan="10" style="text-align:center;color:var(--dim);padding:30px;">
+                            <tr><td colspan="9" style="text-align:center;color:var(--dim);padding:30px;">
                                 {% if search %}Không tìm thấy kết quả cho "{{ search }}"{% else %}Chưa có người dùng{% endif %}
                             </td></tr>
                             {% endif %}
@@ -149,72 +132,6 @@
             </div>
         </div>
 
-        <!-- TRANSACTIONS SECTION -->
-        <div id="transactions-section" class="card">
-            <div class="card-header">
-                <span>Giao dịch gần đây</span>
-                {% if pending_tx > 0 %}
-                <span style="font-size:12px;color:var(--warning);">⚠ {{ pending_tx }} giao dịch chờ xử lý</span>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                <div class="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>User</th>
-                                <th>Số tiền</th>
-                                <th>Loại</th>
-                                <th>Ghi chú</th>
-                                <th>Trạng thái</th>
-                                <th>Thời gian</th>
-                                <th>Thao tác</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for tx in transactions %}
-                            <tr id="tx-row-{{ tx.id }}">
-                                <td>{{ tx.id }}</td>
-                                <td>{{ tx.username }}</td>
-                                <td style="font-weight:600;">{{ "{:,}".format(tx.amount) }}đ</td>
-                                <td>
-                                    {% if tx.type == 'deposit' %}
-                                    <span class="badge badge-success">Nạp</span>
-                                    {% elif tx.type == 'admin_topup' %}
-                                    <span class="badge badge-info">Admin</span>
-                                    {% else %}
-                                    <span class="badge">{{ tx.type }}</span>
-                                    {% endif %}
-                                </td>
-                                <td style="font-size:12px;color:var(--dim);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ tx.note or tx.description }}</td>
-                                <td>
-                                    {% if tx.status == 'completed' %}
-                                    <span class="badge badge-success">OK</span>
-                                    {% elif tx.status == 'pending' %}
-                                    <span class="badge badge-warning">Chờ</span>
-                                    {% else %}
-                                    <span class="badge badge-error">{{ tx.status }}</span>
-                                    {% endif %}
-                                </td>
-                                <td style="font-size:11px;">{{ tx.created_at }}</td>
-                                <td style="white-space:nowrap;">
-                                    {% if tx.status == 'pending' %}
-                                    <button class="btn btn-sm btn-success" onclick="confirmTx({{ tx.id }})">Xác nhận</button>
-                                    {% endif %}
-                                    <button class="btn btn-sm btn-danger" onclick="deleteTx({{ tx.id }})">Xóa</button>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                            {% if not transactions %}
-                            <tr><td colspan="8" style="text-align:center;color:var(--dim);">Chưa có giao dịch</td></tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
         <!-- REVIEWS SECTION -->
         <div id="reviews-section" class="card">
             <div class="card-header">Đánh giá gần đây</div>
@@ -228,7 +145,6 @@
                                 <th>Địa điểm</th>
                                 <th>Nội dung</th>
                                 <th>Sao</th>
-                                <th>Chi phí</th>
                                 <th>Trạng thái</th>
                                 <th>Thời gian</th>
                             </tr>
@@ -241,7 +157,6 @@
                                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.place_url }}">{{ r.place_url[:50] }}{% if r.place_url|length > 50 %}...{% endif %}</td>
                                 <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ r.comment }}">{{ r.comment[:40] }}{% if r.comment and r.comment|length > 40 %}...{% endif %}</td>
                                 <td>{{ '⭐' * r.stars }}</td>
-                                <td style="font-weight:600;">{{ "{:,}".format(r.cost) }}đ</td>
                                 <td>
                                     {% if r.status == 'completed' %}
                                     <span class="badge badge-success">OK</span>
@@ -253,35 +168,13 @@
                             </tr>
                             {% endfor %}
                             {% if not reviews %}
-                            <tr><td colspan="8" style="text-align:center;color:var(--dim);">Chưa có đánh giá</td></tr>
+                            <tr><td colspan="7" style="text-align:center;color:var(--dim);">Chưa có đánh giá</td></tr>
                             {% endif %}
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
-    </div>
-</div>
-
-<!-- TOPUP MODAL -->
-<div class="modal-overlay" id="topupModal">
-    <div class="modal">
-        <h3>Nạp tiền cho <span id="topup-username"></span></h3>
-        <form method="POST" action="{{ url_for('admin_topup') }}">
-            <input type="hidden" name="user_id" id="topup-user-id">
-            <div class="form-group">
-                <label>Số tiền (VNĐ)</label>
-                <input type="number" name="amount" value="50000" min="1000" step="1000" required>
-            </div>
-            <div class="form-group">
-                <label>Ghi chú (tùy chọn)</label>
-                <input type="text" name="note" placeholder="Lý do nạp tiền...">
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('topupModal')">Hủy</button>
-                <button type="submit" class="btn btn-success btn-sm">Nạp tiền</button>
-            </div>
-        </form>
     </div>
 </div>
 
@@ -305,18 +198,12 @@
                 <label>Email</label>
                 <input type="email" name="email" id="edit-email">
             </div>
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Số dư (VNĐ)</label>
-                    <input type="number" name="balance" id="edit-balance" min="0" step="1000">
-                </div>
-                <div class="form-group">
-                    <label>Vai trò</label>
-                    <select name="role" id="edit-role" class="form-select">
-                        <option value="user">User</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                </div>
+            <div class="form-group">
+                <label>Vai trò</label>
+                <select name="role" id="edit-role" class="form-select">
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                </select>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('editUserModal')">Hủy</button>
@@ -333,19 +220,12 @@ function closeModal(id) {
     document.getElementById(id).classList.remove('active');
 }
 
-function openTopupModal(userId, username) {
-    document.getElementById('topup-user-id').value = userId;
-    document.getElementById('topup-username').textContent = username;
-    document.getElementById('topupModal').classList.add('active');
-}
-
-function openEditUser(userId, username, email, fullname, phone, balance, role) {
+function openEditUser(userId, username, email, fullname, phone, role) {
     document.getElementById('edit-user-id').value = userId;
     document.getElementById('edit-username').textContent = username;
     document.getElementById('edit-email').value = email || '';
     document.getElementById('edit-fullname').value = fullname || '';
     document.getElementById('edit-phone').value = phone || '';
-    document.getElementById('edit-balance').value = balance;
     document.getElementById('edit-role').value = role || 'user';
     document.getElementById('editUserModal').classList.add('active');
 }
@@ -385,30 +265,6 @@ function genKey(userId) {
     form.appendChild(input);
     document.body.appendChild(form);
     form.submit();
-}
-
-function confirmTx(txId) {
-    if (!confirm('Xác nhận giao dịch #' + txId + '?')) return;
-    fetch('/admin/confirm-tx', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'tx_id=' + txId
-    }).then(r => r.json()).then(data => {
-        if (data.status === 'ok') location.reload();
-        else alert(data.error || 'Loi');
-    });
-}
-
-function deleteTx(txId) {
-    if (!confirm('Xóa giao dịch #' + txId + '?')) return;
-    fetch('/admin/delete-tx', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'tx_id=' + txId
-    }).then(r => r.json()).then(data => {
-        if (data.status === 'ok') location.reload();
-        else alert(data.error || 'Loi');
-    });
 }
 
 function scrollTo(id) {
