@@ -74,6 +74,9 @@ class ReviewBotApp:
         self.root.geometry("1100x750")
         self.root.minsize(950, 650)
         self.root.configure(bg=COLORS['bg'])
+        icon_path = os.path.join(os.getcwd(), "icon.ico")
+        if os.path.exists(icon_path):
+            self.root.iconbitmap(icon_path)
 
         self._setup_fonts()
 
@@ -184,14 +187,6 @@ class ReviewBotApp:
         form = tk.Frame(container, bg=COLORS['bg'], width=360)
         form.pack()
 
-        tk.Label(form, text="Server URL", font=self.fonts['small'],
-                 fg=COLORS['dim'], bg=COLORS['bg'], anchor=tk.W).pack(fill=tk.X)
-        self.login_server = tk.Entry(form, bg=COLORS['bg3'], fg=COLORS['fg'],
-                                     insertbackground=COLORS['fg'], font=self.fonts['body'],
-                                     relief=tk.FLAT)
-        self.login_server.pack(fill=tk.X, ipady=6, pady=(2, 10))
-        self.login_server.insert(0, self.server_url)
-
         tk.Label(form, text="Username hoac Email", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg'], anchor=tk.W).pack(fill=tk.X)
         self.login_user = tk.Entry(form, bg=COLORS['bg3'], fg=COLORS['fg'],
@@ -221,7 +216,6 @@ class ReviewBotApp:
         self.login_user.focus_set()
 
     def _do_login(self):
-        server = self.login_server.get().strip()
         username = self.login_user.get().strip()
         password = self.login_pass.get().strip()
 
@@ -229,7 +223,7 @@ class ReviewBotApp:
             self.login_status.config(text="Nhap day du thong tin!")
             return
 
-        self.server_url = server
+        self.server_url = SERVER_URL
         self.login_status.config(text="Dang ket noi...", fg=COLORS['warning'])
         self.root.update()
 
