@@ -11,6 +11,7 @@ import os
 import json
 import time
 import random
+import webbrowser
 import urllib.request
 import urllib.error
 from datetime import datetime
@@ -741,11 +742,32 @@ class ReviewBotApp:
         logout_lbl.bind('<Enter>', lambda e: logout_lbl.config(fg=_shade(COLORS['error'], 0.25)))
         logout_lbl.bind('<Leave>', lambda e: logout_lbl.config(fg=COLORS['error']))
 
+        support_card = tk.Frame(sidebar, bg=COLORS['bg2'], highlightbackground=COLORS['border'],
+                                 highlightthickness=1)
+        support_card.pack(side=tk.BOTTOM, fill=tk.X, padx=12, pady=(0, 10))
+        support_inner = tk.Frame(support_card, bg=COLORS['bg2'], padx=10, pady=8)
+        support_inner.pack(fill=tk.X)
+
+        tk.Label(support_inner, text="Ho tro", font=self.fonts['tiny'], fg=COLORS['dim'],
+                 bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(0, 4))
+
+        self._make_support_link(support_inner, "💬 Zalo: 0828118789", "https://zalo.me/0828118789")
+        self._make_support_link(support_inner, "✈️ TG: @Trongsuport", "https://t.me/Trongsuport")
+
         self.main_area = tk.Frame(self.root, bg=COLORS['bg'])
         self.main_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         self._update_sidebar_stats()
         self._navigate('home')
+
+    def _make_support_link(self, parent, text, url):
+        lbl = tk.Label(parent, text=text, font=self.fonts['tiny'], fg=COLORS['fg'],
+                       bg=COLORS['bg2'], cursor='hand2', anchor=tk.W)
+        lbl.pack(fill=tk.X, pady=1)
+        lbl.bind('<Button-1>', lambda e: webbrowser.open(url))
+        lbl.bind('<Enter>', lambda e: lbl.config(fg=COLORS['accent']))
+        lbl.bind('<Leave>', lambda e: lbl.config(fg=COLORS['fg']))
+        return lbl
 
     def _update_sidebar_stats(self):
         acc_count = len(self.google_accounts)
