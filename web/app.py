@@ -1,10 +1,12 @@
 import os
+import re
 import sqlite3
 import hashlib
 import secrets
 import time
 from datetime import datetime
 from functools import wraps
+from urllib.parse import quote
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -30,6 +32,33 @@ DATABASE = os.environ.get(
 
 # In-memory token store for desktop tool API (token -> user_id)
 tool_tokens = {}
+
+# ==================== NAP TIEN / XU (SePay) ====================
+
+XU_RATE = 1000  # 1.000d = 1 xu
+DEPOSIT_CODE_PREFIX = 'NAP'
+DEPOSIT_MIN_AMOUNT = 10000
+
+SEPAY_ACCOUNT_NUMBER = os.environ.get('SEPAY_ACCOUNT_NUMBER', '')
+SEPAY_BANK_CODE = os.environ.get('SEPAY_BANK_CODE', 'MBBank')
+SEPAY_ACCOUNT_NAME = os.environ.get('SEPAY_ACCOUNT_NAME', '')
+SEPAY_WEBHOOK_TOKEN = os.environ.get('SEPAY_WEBHOOK_TOKEN', '')
+
+
+def deposit_code(tx_id):
+    return f'{DEPOSIT_CODE_PREFIX}{tx_id}'
+
+
+def build_qr_url(amount, content):
+    if not SEPAY_ACCOUNT_NUMBER:
+        return None
+    return (
+        f'https://qr.sepay.vn/img?acc={quote(SEPAY_ACCOUNT_NUMBER)}'
+        f'&bank={quote(SEPAY_BANK_CODE)}'
+        f'&amount={int(amount)}'
+        f'&des={quote(content)}'
+        f'&template=compact'
+    )
 
 
 # ==================== DATABASE ====================
@@ -110,6 +139,14 @@ def init_db():
         );
     ''')
 
+    # Migration: them cot xu (users) va xu_amount (transactions) cho DB da ton tai tu truoc
+    user_cols = {row[1] for row in db.execute('PRAGMA table_info(users)')}
+    if 'xu' not in user_cols:
+        db.execute('ALTER TABLE users ADD COLUMN xu INTEGER DEFAULT 0')
+    tx_cols = {row[1] for row in db.execute('PRAGMA table_info(transactions)')}
+    if 'xu_amount' not in tx_cols:
+        db.execute('ALTER TABLE transactions ADD COLUMN xu_amount INTEGER DEFAULT 0')
+
     cursor = db.execute('SELECT COUNT(*) FROM users WHERE role = "admin"')
     if cursor.fetchone()[0] == 0:
         admin_pass = generate_password_hash('admin123')
@@ -125,13 +162,14 @@ def init_db():
 # ==================== USER MODEL ====================
 
 class User(UserMixin):
-    def __init__(self, id, username, email, fullname, phone, wallet_balance, role, is_active, total_reviews, last_login):
+    def __init__(self, id, username, email, fullname, phone, wallet_balance, xu, role, is_active, total_reviews, last_login):
         self.id = id
         self.username = username
         self.email = email
         self.fullname = fullname
         self.phone = phone
         self.wallet_balance = wallet_balance
+        self.xu = xu
         self.role = role
         self._is_active = is_active
         self.total_reviews = total_reviews
@@ -149,7 +187,7 @@ def load_user(user_id):
     if row:
         return User(
             row['id'], row['username'], row['email'], row['fullname'],
-            row['phone'], row['wallet_balance'], row['role'], row['is_active'],
+            row['phone'], row['wallet_balance'], row['xu'], row['role'], row['is_active'],
             row['total_reviews'], row['last_login']
         )
     return None
@@ -239,7 +277,7 @@ def login():
 
             user = User(
                 row['id'], row['username'], row['email'], row['fullname'],
-                row['phone'], row['wallet_balance'], row['role'], row['is_active'],
+                row['phone'], row['wallet_balance'], row['xu'], row['role'], row['is_active'],
                 row['total_reviews'], row['last_login']
             )
             login_user(user)
@@ -287,9 +325,16 @@ def dashboard():
         'SELECT key FROM api_keys WHERE user_id = ? AND is_active = 1 LIMIT 1',
         (current_user.id,)
     ).fetchone()
+    transactions = db.execute(
+        'SELECT * FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 20',
+        (current_user.id,)
+    ).fetchall()
 
     return render_template('dashboard.html',
                            reviews=reviews,
+                           transactions=transactions,
+                           xu_rate=XU_RATE,
+                           deposit_min=DEPOSIT_MIN_AMOUNT,
                            api_key=api_key['key'] if api_key else None)
 
 
@@ -315,6 +360,113 @@ def update_profile():
     db.commit()
     flash('Đã cập nhật thông tin!', 'success')
     return redirect(url_for('dashboard'))
+
+
+# ==================== NAP TIEN / XU ====================
+
+@app.route('/api/deposit/create', methods=['POST'])
+@login_required
+def deposit_create():
+    data = request.get_json(silent=True) or request.form
+    try:
+        amount = int(data.get('amount'))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'So tien khong hop le'}), 400
+
+    if amount < DEPOSIT_MIN_AMOUNT:
+        return jsonify({'error': f'So tien toi thieu {DEPOSIT_MIN_AMOUNT:,}d'}), 400
+
+    db = get_db()
+    cur = db.execute(
+        'INSERT INTO transactions (user_id, amount, type, description, status) VALUES (?, ?, ?, ?, ?)',
+        (current_user.id, amount, 'deposit', 'Nap tien qua SePay', 'pending')
+    )
+    tx_id = cur.lastrowid
+    code = deposit_code(tx_id)
+    db.execute('UPDATE transactions SET note = ? WHERE id = ?', (code, tx_id))
+    db.commit()
+
+    return jsonify({
+        'tx_id': tx_id,
+        'code': code,
+        'amount': amount,
+        'xu': amount // XU_RATE,
+        'qr_url': build_qr_url(amount, code),
+        'bank_account': SEPAY_ACCOUNT_NUMBER,
+        'bank_code': SEPAY_BANK_CODE,
+        'account_name': SEPAY_ACCOUNT_NAME,
+    })
+
+
+@app.route('/api/deposit/status/<int:tx_id>')
+@login_required
+def deposit_status(tx_id):
+    db = get_db()
+    tx = db.execute(
+        'SELECT * FROM transactions WHERE id = ? AND user_id = ?', (tx_id, current_user.id)
+    ).fetchone()
+    if not tx:
+        return jsonify({'error': 'Not found'}), 404
+
+    return jsonify({
+        'status': tx['status'],
+        'amount': tx['amount'],
+        'xu_amount': tx['xu_amount'],
+    })
+
+
+@app.route('/api/sepay/webhook', methods=['POST'])
+def sepay_webhook():
+    if not SEPAY_WEBHOOK_TOKEN:
+        return jsonify({'error': 'Webhook chua duoc cau hinh'}), 501
+
+    auth = request.headers.get('Authorization', '')
+    token = auth.split(' ')[-1] if auth else ''
+    if not token or not secrets.compare_digest(token, SEPAY_WEBHOOK_TOKEN):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.get_json(silent=True) or {}
+    if data.get('transferType') != 'in':
+        return jsonify({'success': True})
+
+    try:
+        transfer_amount = int(data.get('transferAmount', 0))
+    except (ValueError, TypeError):
+        transfer_amount = 0
+
+    content = f"{data.get('code') or ''} {data.get('content') or ''} {data.get('description') or ''}"
+    content = re.sub(r'\s+', '', content).upper()
+    match = re.search(re.escape(DEPOSIT_CODE_PREFIX) + r'(\d+)', content)
+    if not match or transfer_amount <= 0:
+        return jsonify({'success': True, 'matched': False})
+
+    tx_id = int(match.group(1))
+    sepay_ref = str(data.get('id') or data.get('referenceCode') or '')
+
+    db = get_db()
+    if sepay_ref:
+        existing = db.execute(
+            'SELECT id FROM transactions WHERE sepay_id = ? AND status = "completed"', (sepay_ref,)
+        ).fetchone()
+        if existing:
+            return jsonify({'success': True, 'matched': False, 'reason': 'duplicate'})
+
+    tx = db.execute(
+        'SELECT * FROM transactions WHERE id = ? AND type = "deposit" AND status = "pending"', (tx_id,)
+    ).fetchone()
+    if not tx:
+        return jsonify({'success': True, 'matched': False, 'reason': 'tx not found'})
+
+    xu = transfer_amount // XU_RATE
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    db.execute(
+        'UPDATE transactions SET status = "completed", amount = ?, xu_amount = ?, sepay_id = ?, completed_at = ? WHERE id = ?',
+        (transfer_amount, xu, sepay_ref, now, tx_id)
+    )
+    db.execute('UPDATE users SET xu = xu + ? WHERE id = ?', (xu, tx['user_id']))
+    db.commit()
+
+    return jsonify({'success': True, 'matched': True, 'xu': xu})
 
 
 # ==================== API CHO BOT ====================
@@ -625,6 +777,10 @@ def admin_dashboard():
     reviews = db.execute(
         'SELECT r.*, u.username FROM reviews r JOIN users u ON r.user_id = u.id ORDER BY r.created_at DESC LIMIT 30'
     ).fetchall()
+    transactions = db.execute(
+        'SELECT t.*, u.username FROM transactions t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC LIMIT 30'
+    ).fetchall()
+    total_xu = db.execute('SELECT COALESCE(SUM(xu), 0) FROM users').fetchone()[0]
 
     total_users_count = db.execute('SELECT COUNT(*) FROM users WHERE role = "user"').fetchone()[0]
     total_reviews = db.execute('SELECT COUNT(*) FROM reviews').fetchone()[0]
@@ -673,6 +829,8 @@ def admin_dashboard():
     return render_template('admin.html',
                            users=users,
                            reviews=reviews,
+                           transactions=transactions,
+                           total_xu=total_xu,
                            total_users=total_users_count,
                            total_reviews=total_reviews,
                            reviews_today=reviews_today,
@@ -708,14 +866,15 @@ def admin_topup():
         flash('User không tồn tại!', 'error')
         return redirect(url_for('admin_dashboard'))
 
+    xu = amount // XU_RATE
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    db.execute('UPDATE users SET wallet_balance = wallet_balance + ? WHERE id = ?', (amount, user_id))
+    db.execute('UPDATE users SET xu = xu + ? WHERE id = ?', (xu, user_id))
     db.execute(
-        'INSERT INTO transactions (user_id, amount, type, description, note, status, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        (user_id, amount, 'admin_topup', f'Admin nạp {amount:,}đ', note, 'completed', now)
+        'INSERT INTO transactions (user_id, amount, xu_amount, type, description, note, status, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        (user_id, amount, xu, 'admin_topup', f'Admin nạp {amount:,}đ ({xu:,} xu)', note, 'completed', now)
     )
     db.commit()
-    flash(f'Đã nạp {amount:,}đ cho {user["username"]}!', 'success')
+    flash(f'Đã nạp {xu:,} xu ({amount:,}đ) cho {user["username"]}!', 'success')
     return redirect(url_for('admin_dashboard'))
 
 
@@ -743,20 +902,20 @@ def admin_edit_user():
     email = request.form.get('email', user['email']).strip()
     phone = request.form.get('phone', user['phone']).strip()
     role = request.form.get('role', user['role']).strip()
-    balance = request.form.get('balance', user['wallet_balance'])
+    xu = request.form.get('xu', user['xu'])
 
     try:
-        balance = int(balance)
+        xu = int(xu)
     except (ValueError, TypeError):
-        balance = user['wallet_balance']
+        xu = user['xu']
 
     if role not in ('user', 'admin'):
         role = 'user'
 
     try:
         db.execute(
-            'UPDATE users SET fullname = ?, email = ?, phone = ?, role = ?, wallet_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-            (fullname, email, phone, role, balance, user_id)
+            'UPDATE users SET fullname = ?, email = ?, phone = ?, role = ?, xu = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            (fullname, email, phone, role, xu, user_id)
         )
         db.commit()
         flash(f'Đã cập nhật {user["username"]}!', 'success')
@@ -804,15 +963,17 @@ def admin_confirm_tx():
     if not tx:
         return jsonify({'error': 'Transaction not found or already processed'}), 404
 
+    xu = tx['amount'] // XU_RATE
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     db.execute(
-        'UPDATE transactions SET status = "completed", completed_at = ? WHERE id = ?', (now, tx_id)
+        'UPDATE transactions SET status = "completed", xu_amount = ?, completed_at = ? WHERE id = ?',
+        (xu, now, tx_id)
     )
     db.execute(
-        'UPDATE users SET wallet_balance = wallet_balance + ? WHERE id = ?', (tx['amount'], tx['user_id'])
+        'UPDATE users SET xu = xu + ? WHERE id = ?', (xu, tx['user_id'])
     )
     db.commit()
-    return jsonify({'status': 'ok', 'amount': tx['amount']})
+    return jsonify({'status': 'ok', 'amount': tx['amount'], 'xu': xu})
 
 
 @app.route('/admin/delete-tx', methods=['POST'])
@@ -829,9 +990,9 @@ def admin_delete_tx():
     if not tx:
         return jsonify({'error': 'Not found'}), 404
 
-    if tx['status'] == 'completed' and tx['type'] == 'deposit':
+    if tx['status'] == 'completed' and tx['type'] in ('deposit', 'admin_topup'):
         db.execute(
-            'UPDATE users SET wallet_balance = MAX(0, wallet_balance - ?) WHERE id = ?', (tx['amount'], tx['user_id'])
+            'UPDATE users SET xu = MAX(0, xu - ?) WHERE id = ?', (tx['xu_amount'], tx['user_id'])
         )
 
     db.execute('DELETE FROM transactions WHERE id = ?', (tx_id,))

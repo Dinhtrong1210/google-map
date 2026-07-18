@@ -17,6 +17,9 @@
             <a href="#reviews-section" onclick="scrollTo('reviews-section')">
                 <span class="icon">⭐</span> Đánh giá
             </a>
+            <a href="#tx-section" onclick="scrollTo('tx-section')">
+                <span class="icon">💰</span> Giao dịch
+            </a>
         </div>
         <div class="sidebar-user">
             <p class="name">{{ current_user.fullname or current_user.username }}</p>
@@ -51,6 +54,10 @@
             <div class="stat-card" style="border-color:var(--accent);">
                 <div class="number" style="color:var(--accent);">{{ reviews_this_month }}</div>
                 <div class="label">Tháng này</div>
+            </div>
+            <div class="stat-card success">
+                <div class="number">{{ '{:,}'.format(total_xu) }} 🪙</div>
+                <div class="label">Tổng xu toàn hệ thống</div>
             </div>
         </div>
 
@@ -114,6 +121,7 @@
                                 <th>Email</th>
                                 <th>SĐT</th>
                                 <th>Đánh giá</th>
+                                <th>Xu</th>
                                 <th>Vai trò</th>
                                 <th>Trạng thái</th>
                                 <th>Lần cuối</th>
@@ -128,6 +136,7 @@
                                 <td>{{ u.email }}</td>
                                 <td>{{ u.phone or '-' }}</td>
                                 <td>{{ u.total_reviews }}</td>
+                                <td style="font-weight:600;color:var(--accent);">{{ '{:,}'.format(u.xu) }} 🪙</td>
                                 <td>
                                     {% if u.role == 'admin' %}
                                     <span class="badge badge-info">Admin</span>
@@ -145,7 +154,8 @@
                                 <td style="font-size:11px;color:var(--dim);">{{ u.last_login or '-' }}</td>
                                 <td style="white-space:nowrap;">
                                     {% if u.role != 'admin' %}
-                                    <button class="btn btn-sm btn-accent" onclick="openEditUser({{ u.id }}, '{{ u.username }}', '{{ u.email }}', '{{ u.fullname }}', '{{ u.phone }}', '{{ u.role }}')">Sửa</button>
+                                    <button class="btn btn-sm btn-accent" onclick="openEditUser({{ u.id }}, '{{ u.username }}', '{{ u.email }}', '{{ u.fullname }}', '{{ u.phone }}', '{{ u.role }}', {{ u.xu }})">Sửa</button>
+                                    <button class="btn btn-sm btn-success" onclick="openTopup({{ u.id }}, '{{ u.username }}')">Nạp</button>
                                     <button class="btn btn-sm btn-outline" onclick="genKey({{ u.id }})">Key</button>
                                     <button class="btn btn-sm btn-warning" onclick="toggleUser({{ u.id }})">
                                         {{ 'Khóa' if u.is_active else 'Mở' }}
@@ -158,7 +168,7 @@
                             </tr>
                             {% endfor %}
                             {% if not users %}
-                            <tr><td colspan="9" style="text-align:center;color:var(--dim);padding:30px;">
+                            <tr><td colspan="10" style="text-align:center;color:var(--dim);padding:30px;">
                                 {% if search %}Không tìm thấy kết quả cho "{{ search }}"{% else %}Chưa có người dùng{% endif %}
                             </td></tr>
                             {% endif %}
@@ -223,6 +233,84 @@
                 </div>
             </div>
         </div>
+
+        <!-- TRANSACTIONS SECTION -->
+        <div id="tx-section" class="card">
+            <div class="card-header">Giao dịch nạp tiền gần đây</div>
+            <div class="card-body">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>User</th>
+                                <th>Loại</th>
+                                <th>Mã GD</th>
+                                <th>Số tiền</th>
+                                <th>Xu</th>
+                                <th>Trạng thái</th>
+                                <th>Thời gian</th>
+                                <th>Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in transactions %}
+                            <tr id="tx-row-{{ t.id }}">
+                                <td>{{ t.id }}</td>
+                                <td>{{ t.username }}</td>
+                                <td>{{ 'Nạp SePay' if t.type == 'deposit' else 'Admin nạp' if t.type == 'admin_topup' else t.type }}</td>
+                                <td>{{ t.note or '-' }}</td>
+                                <td>{{ '{:,}'.format(t.amount) }}đ</td>
+                                <td>{{ '{:,}'.format(t.xu_amount) }} 🪙</td>
+                                <td>
+                                    {% if t.status == 'completed' %}
+                                    <span class="badge badge-success">Thành công</span>
+                                    {% elif t.status == 'pending' %}
+                                    <span class="badge badge-warning">Chờ</span>
+                                    {% else %}
+                                    <span class="badge badge-error">{{ t.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td style="font-size:11px;">{{ t.created_at }}</td>
+                                <td style="white-space:nowrap;">
+                                    {% if t.status == 'pending' %}
+                                    <button class="btn btn-sm btn-success" onclick="confirmTx({{ t.id }})">Duyệt</button>
+                                    {% endif %}
+                                    <button class="btn btn-sm btn-danger" onclick="deleteTx({{ t.id }})">Xóa</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not transactions %}
+                            <tr><td colspan="9" style="text-align:center;color:var(--dim);padding:20px;">Chưa có giao dịch</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TOPUP MODAL -->
+<div class="modal-overlay" id="topupModal">
+    <div class="modal" style="max-width:420px;">
+        <h3>Nạp xu cho <span id="topup-username"></span></h3>
+        <form method="POST" action="{{ url_for('admin_topup') }}">
+            <input type="hidden" name="user_id" id="topup-user-id">
+            <div class="form-group">
+                <label>Số tiền (đ)</label>
+                <input type="number" name="amount" id="topup-amount" min="1000" step="1000" oninput="updateTopupPreview()" required>
+            </div>
+            <p style="color:var(--dim);font-size:13px;">= <span id="topup-xu-preview">0</span> 🪙 xu (tỷ lệ 1.000đ = 1 xu)</p>
+            <div class="form-group">
+                <label>Ghi chú</label>
+                <input type="text" name="note" placeholder="Không bắt buộc">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('topupModal')">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm">Nạp xu</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -246,12 +334,18 @@
                 <label>Email</label>
                 <input type="email" name="email" id="edit-email">
             </div>
-            <div class="form-group">
-                <label>Vai trò</label>
-                <select name="role" id="edit-role" class="form-select">
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                </select>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Vai trò</label>
+                    <select name="role" id="edit-role" class="form-select">
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Số xu</label>
+                    <input type="number" name="xu" id="edit-xu" min="0">
+                </div>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-outline btn-sm" onclick="closeModal('editUserModal')">Hủy</button>
@@ -268,14 +362,52 @@ function closeModal(id) {
     document.getElementById(id).classList.remove('active');
 }
 
-function openEditUser(userId, username, email, fullname, phone, role) {
+function openEditUser(userId, username, email, fullname, phone, role, xu) {
     document.getElementById('edit-user-id').value = userId;
     document.getElementById('edit-username').textContent = username;
     document.getElementById('edit-email').value = email || '';
     document.getElementById('edit-fullname').value = fullname || '';
     document.getElementById('edit-phone').value = phone || '';
     document.getElementById('edit-role').value = role || 'user';
+    document.getElementById('edit-xu').value = xu || 0;
     document.getElementById('editUserModal').classList.add('active');
+}
+
+function openTopup(userId, username) {
+    document.getElementById('topup-user-id').value = userId;
+    document.getElementById('topup-username').textContent = username;
+    document.getElementById('topup-amount').value = '';
+    document.getElementById('topup-xu-preview').textContent = '0';
+    document.getElementById('topupModal').classList.add('active');
+}
+
+function updateTopupPreview() {
+    const amount = parseInt(document.getElementById('topup-amount').value, 10) || 0;
+    document.getElementById('topup-xu-preview').textContent = Math.floor(amount / 1000).toLocaleString('vi-VN');
+}
+
+function confirmTx(txId) {
+    if (!confirm('Duyệt giao dịch #' + txId + '?')) return;
+    fetch('/admin/confirm-tx', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'tx_id=' + txId
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') location.reload();
+        else alert(data.error || 'Loi');
+    });
+}
+
+function deleteTx(txId) {
+    if (!confirm('Xóa giao dịch #' + txId + '? Nếu đã hoàn thành, xu tương ứng sẽ bị trừ lại.')) return;
+    fetch('/admin/delete-tx', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'tx_id=' + txId
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'ok') location.reload();
+        else alert(data.error || 'Loi');
+    });
 }
 
 function toggleUser(userId) {

@@ -36,6 +36,27 @@
                 <div class="number">{{ current_user.total_reviews }}</div>
                 <div class="label">Tổng đã đánh giá</div>
             </div>
+            <div class="stat-card info">
+                <div class="number" id="xu-balance">{{ '{:,}'.format(current_user.xu) }} 🪙</div>
+                <div class="label">Số xu hiện có</div>
+            </div>
+        </div>
+
+        <!-- NAP TIEN -->
+        <div class="card">
+            <div class="card-header">Nạp tiền &rarr; Xu</div>
+            <div class="card-body">
+                <p style="color:var(--dim);font-size:13px;margin-bottom:14px;">
+                    Tỷ lệ quy đổi: 1.000đ = 1 xu. Chuyển khoản qua SePay, xu được cộng tự động sau khi hệ thống nhận được tiền.
+                </p>
+                <form id="deposit-form" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0;min-width:200px;">
+                        <label>Số tiền (đ)</label>
+                        <input type="number" id="deposit-amount" min="{{ deposit_min }}" step="1000" placeholder="Tối thiểu {{ '{:,}'.format(deposit_min) }}đ" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width:auto;padding:10px 24px;">Tạo giao dịch nạp</button>
+                </form>
+            </div>
         </div>
 
         <!-- API KEY -->
@@ -99,6 +120,48 @@
             </div>
         </div>
 
+        <!-- DEPOSIT HISTORY -->
+        <div id="deposit-history" class="card">
+            <div class="card-header">Lịch sử nạp tiền</div>
+            <div class="card-body">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Thời gian</th>
+                                <th>Mã GD</th>
+                                <th>Số tiền</th>
+                                <th>Xu nhận</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in transactions %}
+                            <tr>
+                                <td style="font-size:11px;">{{ t.created_at }}</td>
+                                <td>{{ t.note or '-' }}</td>
+                                <td>{{ '{:,}'.format(t.amount) }}đ</td>
+                                <td>{{ '{:,}'.format(t.xu_amount) }} 🪙</td>
+                                <td>
+                                    {% if t.status == 'completed' %}
+                                    <span class="badge badge-success">Thành công</span>
+                                    {% elif t.status == 'pending' %}
+                                    <span class="badge badge-warning">Chờ thanh toán</span>
+                                    {% else %}
+                                    <span class="badge badge-error">{{ t.status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not transactions %}
+                            <tr><td colspan="5" style="text-align:center;color:var(--dim);padding:20px;">Chưa có giao dịch</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- PROFILE -->
         <div id="profile" class="card">
             <div class="card-header">Thông tin tài khoản</div>
@@ -134,6 +197,30 @@
         </div>
     </div>
 </div>
+
+<!-- DEPOSIT MODAL -->
+<div class="modal-overlay" id="depositModal">
+    <div class="modal" style="max-width:420px;text-align:center;">
+        <h3>Quét mã để nạp tiền</h3>
+        <div id="deposit-qr-wrap">
+            <img id="deposit-qr" src="" alt="QR chuyển khoản" style="width:100%;max-width:280px;border-radius:8px;margin-bottom:14px;">
+        </div>
+        <div style="text-align:left;font-size:13px;line-height:1.9;background:rgba(255,255,255,0.03);padding:12px 16px;border-radius:8px;">
+            <div>Ngân hàng: <strong id="deposit-bank"></strong></div>
+            <div>Số tài khoản: <strong id="deposit-account"></strong></div>
+            <div>Chủ tài khoản: <strong id="deposit-holder"></strong></div>
+            <div>Số tiền: <strong id="deposit-amount-view"></strong></div>
+            <div>Nội dung CK: <strong id="deposit-code" style="color:var(--accent);"></strong></div>
+        </div>
+        <p style="color:var(--warning);font-size:12px;margin-top:10px;">
+            Nhập ĐÚNG nội dung chuyển khoản ở trên để hệ thống tự nhận diện và cộng xu.
+        </p>
+        <p id="deposit-status-text" style="margin-top:14px;font-weight:600;">⏳ Đang chờ thanh toán...</p>
+        <div class="modal-actions" style="justify-content:center;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="closeDepositModal()">Đóng</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -149,5 +236,48 @@ function copyKey() {
 function scrollTo(id) {
     document.getElementById(id).scrollIntoView({behavior: 'smooth'});
 }
+
+let depositPollTimer = null;
+
+function closeDepositModal() {
+    document.getElementById('depositModal').classList.remove('active');
+    if (depositPollTimer) { clearInterval(depositPollTimer); depositPollTimer = null; }
+}
+
+document.getElementById('deposit-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const amount = parseInt(document.getElementById('deposit-amount').value, 10);
+    if (!amount) return;
+
+    fetch('/api/deposit/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({amount: amount})
+    }).then(r => r.json()).then(data => {
+        if (data.error) { alert(data.error); return; }
+
+        document.getElementById('deposit-qr').src = data.qr_url || '';
+        document.getElementById('deposit-qr-wrap').style.display = data.qr_url ? 'block' : 'none';
+        document.getElementById('deposit-bank').textContent = data.bank_code || '-';
+        document.getElementById('deposit-account').textContent = data.bank_account || '-';
+        document.getElementById('deposit-holder').textContent = data.account_name || '-';
+        document.getElementById('deposit-amount-view').textContent = data.amount.toLocaleString('vi-VN') + 'đ (' + data.xu.toLocaleString('vi-VN') + ' xu)';
+        document.getElementById('deposit-code').textContent = data.code;
+        document.getElementById('deposit-status-text').textContent = '⏳ Đang chờ thanh toán...';
+        document.getElementById('depositModal').classList.add('active');
+
+        if (depositPollTimer) clearInterval(depositPollTimer);
+        depositPollTimer = setInterval(() => {
+            fetch('/api/deposit/status/' + data.tx_id).then(r => r.json()).then(s => {
+                if (s.status === 'completed') {
+                    document.getElementById('deposit-status-text').textContent = '✅ Đã nhận ' + s.xu_amount.toLocaleString('vi-VN') + ' xu!';
+                    clearInterval(depositPollTimer);
+                    depositPollTimer = null;
+                    setTimeout(() => location.reload(), 1500);
+                }
+            });
+        }, 3000);
+    });
+});
 </script>
 {% endblock %}
