@@ -12,6 +12,10 @@ services:
       - SEPAY_BANK_CODE=${SEPAY_BANK_CODE:-MBBank}
       - SEPAY_ACCOUNT_NAME=${SEPAY_ACCOUNT_NAME:-}
       - SEPAY_WEBHOOK_TOKEN=${SEPAY_WEBHOOK_TOKEN:-}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
     volumes:
       - ./data:/app/data
 

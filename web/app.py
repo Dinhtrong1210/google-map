@@ -3,8 +3,10 @@ import re
 import sqlite3
 import hashlib
 import secrets
+import smtplib
 import time
 from datetime import datetime
+from email.mime.text import MIMEText
 from functools import wraps
 from urllib.parse import quote
 
@@ -41,6 +43,32 @@ SEPAY_ACCOUNT_NUMBER = os.environ.get('SEPAY_ACCOUNT_NUMBER', '')
 SEPAY_BANK_CODE = os.environ.get('SEPAY_BANK_CODE', 'MBBank')
 SEPAY_ACCOUNT_NAME = os.environ.get('SEPAY_ACCOUNT_NAME', '')
 SEPAY_WEBHOOK_TOKEN = os.environ.get('SEPAY_WEBHOOK_TOKEN', '')
+
+
+# ==================== QUEN MAT KHAU (OTP qua email) ====================
+
+SMTP_HOST = os.environ.get('SMTP_HOST', 'smtp.gmail.com')
+SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
+SMTP_USER = os.environ.get('SMTP_USER', '')
+SMTP_PASS = os.environ.get('SMTP_PASS', '')
+OTP_TTL_MINUTES = 10
+
+
+def send_email(to_addr, subject, body):
+    if not SMTP_USER or not SMTP_PASS:
+        return False, 'SMTP chua duoc cau hinh'
+    msg = MIMEText(body, 'plain', 'utf-8')
+    msg['Subject'] = subject
+    msg['From'] = SMTP_USER
+    msg['To'] = to_addr
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, [to_addr], msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
 
 def deposit_code(tx_id):
@@ -139,6 +167,16 @@ def init_db():
         CREATE TABLE IF NOT EXISTS tool_tokens (
             token TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS password_resets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            otp TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
@@ -637,6 +675,85 @@ def tool_register():
         return jsonify({'message': 'Dang ky thanh cong'})
     except sqlite3.IntegrityError:
         return jsonify({'error': 'Username hoac email da ton tai'}), 400
+
+
+@app.route('/api/tool/forgot-password', methods=['POST'])
+def tool_forgot_password():
+    data = request.get_json(silent=True) or {}
+    identifier = data.get('username', '').strip()
+    if not identifier:
+        return jsonify({'error': 'Nhap username hoac email'}), 400
+
+    db = get_db()
+    row = db.execute(
+        'SELECT * FROM users WHERE username = ? OR email = ?', (identifier, identifier)
+    ).fetchone()
+
+    generic_ok = {'message': 'Neu tai khoan ton tai, ma OTP da duoc gui toi email dang ky'}
+    if not row:
+        return jsonify(generic_ok)
+
+    recent = db.execute(
+        "SELECT id FROM password_resets WHERE user_id = ? AND created_at >= datetime('now', '-60 seconds')",
+        (row['id'],)
+    ).fetchone()
+    if recent:
+        return jsonify({'error': 'Ban vua yeu cau ma, vui long doi it phut roi thu lai'}), 429
+
+    otp = f"{secrets.randbelow(1000000):06d}"
+    db.execute(
+        "INSERT INTO password_resets (user_id, otp, expires_at) VALUES (?, ?, datetime('now', ?))",
+        (row['id'], otp, f'+{OTP_TTL_MINUTES} minutes')
+    )
+    db.commit()
+
+    ok, err = send_email(
+        row['email'],
+        'Ma xac nhan dat lai mat khau - Google Maps Review Bot',
+        f"Xin chao {row['username']},\n\n"
+        f"Ma OTP de dat lai mat khau cua ban la: {otp}\n"
+        f"Ma co hieu luc trong {OTP_TTL_MINUTES} phut.\n\n"
+        f"Neu ban khong yeu cau dat lai mat khau, hay bo qua email nay."
+    )
+    if not ok:
+        return jsonify({'error': f'Khong gui duoc email: {err}'}), 500
+
+    return jsonify(generic_ok)
+
+
+@app.route('/api/tool/reset-password', methods=['POST'])
+def tool_reset_password():
+    data = request.get_json(silent=True) or {}
+    identifier = data.get('username', '').strip()
+    otp = data.get('otp', '').strip()
+    new_password = data.get('new_password', '')
+
+    if not identifier or not otp or not new_password:
+        return jsonify({'error': 'Nhap day du thong tin'}), 400
+    if len(new_password) < 6:
+        return jsonify({'error': 'Mat khau moi toi thieu 6 ky tu'}), 400
+
+    db = get_db()
+    row = db.execute(
+        'SELECT * FROM users WHERE username = ? OR email = ?', (identifier, identifier)
+    ).fetchone()
+    if not row:
+        return jsonify({'error': 'Ma OTP khong dung hoac da het han'}), 400
+
+    reset_row = db.execute(
+        "SELECT * FROM password_resets WHERE user_id = ? AND otp = ? AND used = 0 "
+        "AND expires_at >= datetime('now') ORDER BY id DESC LIMIT 1",
+        (row['id'], otp)
+    ).fetchone()
+    if not reset_row:
+        return jsonify({'error': 'Ma OTP khong dung hoac da het han'}), 400
+
+    hashed = generate_password_hash(new_password)
+    db.execute('UPDATE users SET password = ? WHERE id = ?', (hashed, row['id']))
+    db.execute('UPDATE password_resets SET used = 1 WHERE id = ?', (reset_row['id'],))
+    db.commit()
+
+    return jsonify({'message': 'Dat lai mat khau thanh cong! Hay dang nhap lai.'})
 
 
 def _tool_auth():

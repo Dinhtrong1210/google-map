@@ -221,8 +221,18 @@ class ReviewBotApp:
                   relief=tk.FLAT, cursor="hand2", width=30)
         self.login_btn.pack(ipady=4)
 
-        tk.Label(form, text="Chua co tai khoan? Dang ky tai web admin",
-                 font=self.fonts['tiny'], fg=COLORS['dim'], bg=COLORS['bg']).pack(pady=(12, 0))
+        links_row = tk.Frame(form, bg=COLORS['bg'])
+        links_row.pack(pady=(14, 0))
+
+        reg_link = tk.Label(links_row, text="Dang ky tai khoan", font=self.fonts['tiny'],
+                             fg=COLORS['accent'], bg=COLORS['bg'], cursor="hand2")
+        reg_link.pack(side=tk.LEFT, padx=(0, 20))
+        reg_link.bind('<Button-1>', lambda e: self._show_register_screen())
+
+        forgot_link = tk.Label(links_row, text="Quen mat khau?", font=self.fonts['tiny'],
+                                fg=COLORS['dim'], bg=COLORS['bg'], cursor="hand2")
+        forgot_link.pack(side=tk.LEFT)
+        forgot_link.bind('<Button-1>', lambda e: self._show_forgot_password_screen())
 
         self.login_pass.bind('<Return>', lambda e: self._do_login())
         self.login_user.focus_set()
@@ -255,6 +265,197 @@ class ReviewBotApp:
 
         self._async_api_call('/api/tool/login', 'POST',
                               {'username': username, 'password': password}, on_done=on_done)
+
+    # ==================== REGISTER SCREEN ====================
+
+    def _labeled_entry(self, parent, label_text, show=None):
+        tk.Label(parent, text=label_text, font=self.fonts['small'],
+                 fg=COLORS['dim'], bg=COLORS['bg'], anchor=tk.W).pack(fill=tk.X)
+        e = tk.Entry(parent, bg=COLORS['bg3'], fg=COLORS['fg'],
+                     insertbackground=COLORS['fg'], font=self.fonts['body'],
+                     relief=tk.FLAT, show=show)
+        e.pack(fill=tk.X, ipady=6, pady=(2, 10))
+        return e
+
+    def _show_register_screen(self):
+        self._clear_window()
+
+        container = tk.Frame(self.root, bg=COLORS['bg'])
+        container.place(relx=0.5, rely=0.5, anchor='center')
+
+        tk.Label(container, text="DANG KY TAI KHOAN", font=self.fonts['title'],
+                 fg=COLORS['accent'], bg=COLORS['bg']).pack(pady=(0, 20))
+
+        form = tk.Frame(container, bg=COLORS['bg'], width=360)
+        form.pack()
+
+        self.reg_username = self._labeled_entry(form, "Username (toi thieu 3 ky tu)")
+        self.reg_email = self._labeled_entry(form, "Email")
+        self.reg_fullname = self._labeled_entry(form, "Ho ten (khong bat buoc)")
+        self.reg_password = self._labeled_entry(form, "Mat khau (toi thieu 6 ky tu)", show='*')
+        self.reg_password2 = self._labeled_entry(form, "Nhap lai mat khau", show='*')
+
+        self.reg_status = tk.Label(form, text="", font=self.fonts['small'], fg=COLORS['error'],
+                                    bg=COLORS['bg'], wraplength=340, justify=tk.LEFT)
+        self.reg_status.pack(pady=(0, 8))
+
+        self.reg_btn = tk.Button(form, text="DANG KY", command=self._do_register,
+                                  bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
+                                  relief=tk.FLAT, cursor="hand2", width=30)
+        self.reg_btn.pack(ipady=4)
+
+        back_link = tk.Label(form, text="< Quay lai dang nhap", font=self.fonts['tiny'],
+                              fg=COLORS['dim'], bg=COLORS['bg'], cursor="hand2")
+        back_link.pack(pady=(14, 0))
+        back_link.bind('<Button-1>', lambda e: self._show_login_screen())
+
+        self.reg_username.focus_set()
+
+    def _do_register(self):
+        username = self.reg_username.get().strip()
+        email = self.reg_email.get().strip()
+        fullname = self.reg_fullname.get().strip()
+        password = self.reg_password.get()
+        password2 = self.reg_password2.get()
+
+        if not username or not email or not password:
+            self.reg_status.config(text="Nhap day du thong tin!", fg=COLORS['error'])
+            return
+        if len(username) < 3:
+            self.reg_status.config(text="Username toi thieu 3 ky tu!", fg=COLORS['error'])
+            return
+        if len(password) < 6:
+            self.reg_status.config(text="Mat khau toi thieu 6 ky tu!", fg=COLORS['error'])
+            return
+        if password != password2:
+            self.reg_status.config(text="Mat khau nhap lai khong khop!", fg=COLORS['error'])
+            return
+        if '@' not in email:
+            self.reg_status.config(text="Email khong hop le!", fg=COLORS['error'])
+            return
+
+        self.server_url = SERVER_URL
+        self.reg_status.config(text="Dang dang ky...", fg=COLORS['warning'])
+        self.reg_btn.config(state=tk.DISABLED)
+
+        def on_done(resp):
+            if not hasattr(self, 'reg_btn') or not self.reg_btn.winfo_exists():
+                return
+            self.reg_btn.config(state=tk.NORMAL)
+            if 'error' in resp:
+                self.reg_status.config(text=resp['error'], fg=COLORS['error'])
+                return
+            messagebox.showinfo("Thanh cong", "Dang ky thanh cong! Hay dang nhap.")
+            self._show_login_screen()
+            self.login_user.insert(0, username)
+            self.login_pass.focus_set()
+
+        self._async_api_call('/api/tool/register', 'POST', {
+            'username': username, 'email': email, 'password': password, 'fullname': fullname
+        }, on_done=on_done)
+
+    # ==================== FORGOT PASSWORD SCREEN ====================
+
+    def _show_forgot_password_screen(self):
+        self._clear_window()
+
+        container = tk.Frame(self.root, bg=COLORS['bg'])
+        container.place(relx=0.5, rely=0.5, anchor='center')
+
+        tk.Label(container, text="QUEN MAT KHAU", font=self.fonts['title'],
+                 fg=COLORS['accent'], bg=COLORS['bg']).pack(pady=(0, 6))
+        tk.Label(container, text="Nhap username hoac email da dang ky de nhan ma OTP qua email.",
+                 font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg'],
+                 wraplength=360, justify=tk.CENTER).pack(pady=(0, 16))
+
+        form = tk.Frame(container, bg=COLORS['bg'], width=360)
+        form.pack()
+
+        self.forgot_identifier = self._labeled_entry(form, "Username hoac Email")
+
+        self.forgot_status = tk.Label(form, text="", font=self.fonts['small'], fg=COLORS['error'],
+                                       bg=COLORS['bg'], wraplength=340, justify=tk.LEFT)
+        self.forgot_status.pack(pady=(0, 8))
+
+        self.forgot_send_btn = tk.Button(form, text="GUI MA OTP", command=self._do_forgot_request,
+                                          bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
+                                          relief=tk.FLAT, cursor="hand2", width=30)
+        self.forgot_send_btn.pack(ipady=4)
+
+        # Buoc 2: chi hien sau khi gui OTP thanh cong
+        self.forgot_step2_frame = tk.Frame(form, bg=COLORS['bg'])
+
+        self.forgot_otp = self._labeled_entry(self.forgot_step2_frame, "Ma OTP (6 so, gui qua email)")
+        self.forgot_new_pass = self._labeled_entry(self.forgot_step2_frame, "Mat khau moi", show='*')
+
+        self.forgot_reset_btn = tk.Button(self.forgot_step2_frame, text="DAT LAI MAT KHAU",
+                                           command=self._do_reset_password,
+                                           bg=COLORS['success'], fg='#000', font=self.fonts['btn'],
+                                           relief=tk.FLAT, cursor="hand2", width=30)
+        self.forgot_reset_btn.pack(ipady=4)
+
+        back_link = tk.Label(form, text="< Quay lai dang nhap", font=self.fonts['tiny'],
+                              fg=COLORS['dim'], bg=COLORS['bg'], cursor="hand2")
+        back_link.pack(pady=(14, 0))
+        back_link.bind('<Button-1>', lambda e: self._show_login_screen())
+
+        self.forgot_identifier.focus_set()
+
+    def _do_forgot_request(self):
+        identifier = self.forgot_identifier.get().strip()
+        if not identifier:
+            self.forgot_status.config(text="Nhap username hoac email!", fg=COLORS['error'])
+            return
+
+        self.server_url = SERVER_URL
+        self.forgot_status.config(text="Dang gui ma OTP...", fg=COLORS['warning'])
+        self.forgot_send_btn.config(state=tk.DISABLED)
+
+        def on_done(resp):
+            if not hasattr(self, 'forgot_send_btn') or not self.forgot_send_btn.winfo_exists():
+                return
+            self.forgot_send_btn.config(state=tk.NORMAL)
+            if 'error' in resp:
+                self.forgot_status.config(text=resp['error'], fg=COLORS['error'])
+                return
+            self.forgot_status.config(text=resp.get('message', 'Da gui ma OTP, kiem tra email!'),
+                                       fg=COLORS['success'])
+            self.forgot_step2_frame.pack(fill=tk.X)
+            self.forgot_otp.focus_set()
+
+        self._async_api_call('/api/tool/forgot-password', 'POST',
+                              {'username': identifier}, on_done=on_done)
+
+    def _do_reset_password(self):
+        identifier = self.forgot_identifier.get().strip()
+        otp = self.forgot_otp.get().strip()
+        new_password = self.forgot_new_pass.get()
+
+        if not otp or not new_password:
+            self.forgot_status.config(text="Nhap day du ma OTP va mat khau moi!", fg=COLORS['error'])
+            return
+        if len(new_password) < 6:
+            self.forgot_status.config(text="Mat khau moi toi thieu 6 ky tu!", fg=COLORS['error'])
+            return
+
+        self.forgot_status.config(text="Dang dat lai mat khau...", fg=COLORS['warning'])
+        self.forgot_reset_btn.config(state=tk.DISABLED)
+
+        def on_done(resp):
+            if not hasattr(self, 'forgot_reset_btn') or not self.forgot_reset_btn.winfo_exists():
+                return
+            self.forgot_reset_btn.config(state=tk.NORMAL)
+            if 'error' in resp:
+                self.forgot_status.config(text=resp['error'], fg=COLORS['error'])
+                return
+            messagebox.showinfo("Thanh cong", resp.get('message', 'Da dat lai mat khau!'))
+            self._show_login_screen()
+            self.login_user.insert(0, identifier)
+            self.login_pass.focus_set()
+
+        self._async_api_call('/api/tool/reset-password', 'POST', {
+            'username': identifier, 'otp': otp, 'new_password': new_password
+        }, on_done=on_done)
 
     # ==================== MAIN UI ====================
 
