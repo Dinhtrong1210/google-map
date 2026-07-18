@@ -30,8 +30,6 @@ DATABASE = os.environ.get(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
 )
 
-# In-memory token store for desktop tool API (token -> user_id)
-tool_tokens = {}
 
 # ==================== NAP TIEN / XU (SePay) ====================
 
@@ -136,6 +134,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS tool_tokens (
+            token TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
         );
     ''')
 
@@ -584,8 +589,8 @@ def tool_login():
 
     token = secrets.token_hex(32)
     db.execute('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', (row['id'],))
+    db.execute('INSERT INTO tool_tokens (token, user_id) VALUES (?, ?)', (token, row['id']))
     db.commit()
-    tool_tokens[token] = row['id']
 
     return jsonify({
         'token': token,
@@ -636,8 +641,11 @@ def tool_register():
 
 def _tool_auth():
     token = request.headers.get('X-Auth-Token', '')
-    user_id = tool_tokens.get(token)
-    return user_id
+    if not token:
+        return None
+    db = get_db()
+    row = db.execute('SELECT user_id FROM tool_tokens WHERE token = ?', (token,)).fetchone()
+    return row['user_id'] if row else None
 
 
 @app.route('/api/tool/profile', methods=['GET'])
