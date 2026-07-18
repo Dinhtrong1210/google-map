@@ -364,6 +364,47 @@ def update_profile():
 
 # ==================== NAP TIEN / XU ====================
 
+def _deposit_create(user_id, amount):
+    if amount < DEPOSIT_MIN_AMOUNT:
+        return {'error': f'So tien toi thieu {DEPOSIT_MIN_AMOUNT:,}d'}, 400
+
+    db = get_db()
+    cur = db.execute(
+        'INSERT INTO transactions (user_id, amount, type, description, status) VALUES (?, ?, ?, ?, ?)',
+        (user_id, amount, 'deposit', 'Nap tien qua SePay', 'pending')
+    )
+    tx_id = cur.lastrowid
+    code = deposit_code(tx_id)
+    db.execute('UPDATE transactions SET note = ? WHERE id = ?', (code, tx_id))
+    db.commit()
+
+    return {
+        'tx_id': tx_id,
+        'code': code,
+        'amount': amount,
+        'xu': amount // XU_RATE,
+        'qr_url': build_qr_url(amount, code),
+        'bank_account': SEPAY_ACCOUNT_NUMBER,
+        'bank_code': SEPAY_BANK_CODE,
+        'account_name': SEPAY_ACCOUNT_NAME,
+    }, 200
+
+
+def _deposit_status(user_id, tx_id):
+    db = get_db()
+    tx = db.execute(
+        'SELECT * FROM transactions WHERE id = ? AND user_id = ?', (tx_id, user_id)
+    ).fetchone()
+    if not tx:
+        return {'error': 'Not found'}, 404
+
+    return {
+        'status': tx['status'],
+        'amount': tx['amount'],
+        'xu_amount': tx['xu_amount'],
+    }, 200
+
+
 @app.route('/api/deposit/create', methods=['POST'])
 @login_required
 def deposit_create():
@@ -373,46 +414,15 @@ def deposit_create():
     except (ValueError, TypeError):
         return jsonify({'error': 'So tien khong hop le'}), 400
 
-    if amount < DEPOSIT_MIN_AMOUNT:
-        return jsonify({'error': f'So tien toi thieu {DEPOSIT_MIN_AMOUNT:,}d'}), 400
-
-    db = get_db()
-    cur = db.execute(
-        'INSERT INTO transactions (user_id, amount, type, description, status) VALUES (?, ?, ?, ?, ?)',
-        (current_user.id, amount, 'deposit', 'Nap tien qua SePay', 'pending')
-    )
-    tx_id = cur.lastrowid
-    code = deposit_code(tx_id)
-    db.execute('UPDATE transactions SET note = ? WHERE id = ?', (code, tx_id))
-    db.commit()
-
-    return jsonify({
-        'tx_id': tx_id,
-        'code': code,
-        'amount': amount,
-        'xu': amount // XU_RATE,
-        'qr_url': build_qr_url(amount, code),
-        'bank_account': SEPAY_ACCOUNT_NUMBER,
-        'bank_code': SEPAY_BANK_CODE,
-        'account_name': SEPAY_ACCOUNT_NAME,
-    })
+    body, status = _deposit_create(current_user.id, amount)
+    return jsonify(body), status
 
 
 @app.route('/api/deposit/status/<int:tx_id>')
 @login_required
 def deposit_status(tx_id):
-    db = get_db()
-    tx = db.execute(
-        'SELECT * FROM transactions WHERE id = ? AND user_id = ?', (tx_id, current_user.id)
-    ).fetchone()
-    if not tx:
-        return jsonify({'error': 'Not found'}), 404
-
-    return jsonify({
-        'status': tx['status'],
-        'amount': tx['amount'],
-        'xu_amount': tx['xu_amount'],
-    })
+    body, status = _deposit_status(current_user.id, tx_id)
+    return jsonify(body), status
 
 
 @app.route('/api/sepay/webhook', methods=['POST'])
@@ -585,7 +595,8 @@ def tool_login():
             'email': row['email'],
             'fullname': row['fullname'],
             'role': row['role'],
-            'total_reviews': row['total_reviews']
+            'total_reviews': row['total_reviews'],
+            'xu': row['xu']
         }
     })
 
@@ -648,6 +659,7 @@ def tool_profile():
         'phone': row['phone'],
         'role': row['role'],
         'total_reviews': row['total_reviews'],
+        'xu': row['xu'],
         'is_active': row['is_active'],
         'created_at': row['created_at'],
         'last_login': row['last_login']
@@ -671,8 +683,35 @@ def tool_refresh():
 
     return jsonify({
         'total_reviews': row['total_reviews'],
+        'xu': row['xu'],
         'history': [dict(r) for r in reviews]
     })
+
+
+@app.route('/api/tool/deposit/create', methods=['POST'])
+def tool_deposit_create():
+    user_id = _tool_auth()
+    if not user_id:
+        return jsonify({'error': 'Session expired'}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        amount = int(data.get('amount'))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'So tien khong hop le'}), 400
+
+    body, status = _deposit_create(user_id, amount)
+    return jsonify(body), status
+
+
+@app.route('/api/tool/deposit/status/<int:tx_id>', methods=['GET'])
+def tool_deposit_status(tx_id):
+    user_id = _tool_auth()
+    if not user_id:
+        return jsonify({'error': 'Session expired'}), 401
+
+    body, status = _deposit_status(user_id, tx_id)
+    return jsonify(body), status
 
 
 @app.route('/api/tool/review-done', methods=['POST'])

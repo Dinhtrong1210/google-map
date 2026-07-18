@@ -20,7 +20,7 @@ VERSION = "4.0.0"
 CONFIG_FILE = "tool_config.json"
 PROFILES_DIR = os.path.join(os.getcwd(), "profiles")
 
-SERVER_URL = "http://103.90.227.131:5000"
+SERVER_URL = "https://phamhuudungmedia.vn"
 
 COLORS = {
     'bg':       '#0f0f1a',
@@ -140,6 +140,17 @@ class ReviewBotApp:
         except:
             pass
 
+    def _async_api_call(self, endpoint, method='GET', data=None, on_done=None):
+        """Chay api_call() o thread nen, roi goi on_done(resp) tren main thread qua root.after()."""
+        def worker():
+            resp = api_call(endpoint, method, data, token=self.token, server_url=self.server_url)
+            if on_done:
+                try:
+                    self.root.after(0, lambda: on_done(resp))
+                except RuntimeError:
+                    pass  # window da bi dong
+        threading.Thread(target=worker, daemon=True).start()
+
     def _check_profile_session(self, email):
         profile_name = email_to_profile_name(email)
         profile_path = os.path.join(PROFILES_DIR, profile_name)
@@ -205,9 +216,10 @@ class ReviewBotApp:
                                      fg=COLORS['error'], bg=COLORS['bg'])
         self.login_status.pack(pady=(0, 8))
 
-        tk.Button(form, text="DANG NHAP", command=self._do_login,
+        self.login_btn = tk.Button(form, text="DANG NHAP", command=self._do_login,
                   bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
-                  relief=tk.FLAT, cursor="hand2", width=30).pack(ipady=4)
+                  relief=tk.FLAT, cursor="hand2", width=30)
+        self.login_btn.pack(ipady=4)
 
         tk.Label(form, text="Chua co tai khoan? Dang ky tai web admin",
                  font=self.fonts['tiny'], fg=COLORS['dim'], bg=COLORS['bg']).pack(pady=(12, 0))
@@ -225,18 +237,24 @@ class ReviewBotApp:
 
         self.server_url = SERVER_URL
         self.login_status.config(text="Dang ket noi...", fg=COLORS['warning'])
-        self.root.update()
+        self.login_btn.config(state=tk.DISABLED)
 
-        resp = api_call('/api/tool/login', 'POST', {'username': username, 'password': password}, server_url=self.server_url)
+        def on_done(resp):
+            if not hasattr(self, 'login_btn') or not self.login_btn.winfo_exists():
+                return  # man hinh login da bi thay the (VD: dong app)
+            self.login_btn.config(state=tk.NORMAL)
 
-        if 'error' in resp:
-            self.login_status.config(text=resp['error'], fg=COLORS['error'])
-            return
+            if 'error' in resp:
+                self.login_status.config(text=resp['error'], fg=COLORS['error'])
+                return
 
-        self.token = resp.get('token')
-        self.user_info = resp.get('user')
-        self._save_config()
-        self._show_main_ui()
+            self.token = resp.get('token')
+            self.user_info = resp.get('user')
+            self._save_config()
+            self._show_main_ui()
+
+        self._async_api_call('/api/tool/login', 'POST',
+                              {'username': username, 'password': password}, on_done=on_done)
 
     # ==================== MAIN UI ====================
 
@@ -260,6 +278,7 @@ class ReviewBotApp:
             ('home', '🏠  Danh gia'),
             ('google_accounts', '📧  Tai khoan GG'),
             ('history', '📋  Lich su'),
+            ('deposit', '💰  Nap xu'),
             ('account', '👤  Tai khoan'),
             ('stats', '📊  Thong ke'),
         ]
@@ -295,8 +314,9 @@ class ReviewBotApp:
     def _update_sidebar_stats(self):
         acc_count = len(self.google_accounts)
         logged_in = sum(1 for v in self.google_accounts_status.values() if v)
+        xu = (self.user_info or {}).get('xu', 0)
         self.sidebar_stats.config(
-            text=f"GG accounts: {acc_count} ({logged_in} active)\nDa danh gia: {self.review_count}")
+            text=f"Xu: {xu:,} \U0001FA99\nGG accounts: {acc_count} ({logged_in} active)\nDa danh gia: {self.review_count}")
 
     def _navigate(self, page):
         self.current_page = page
@@ -315,6 +335,8 @@ class ReviewBotApp:
             self._build_google_accounts_page()
         elif page == 'history':
             self._build_history_page()
+        elif page == 'deposit':
+            self._build_deposit_page()
         elif page == 'account':
             self._build_account_page()
         elif page == 'stats':
@@ -470,7 +492,7 @@ class ReviewBotApp:
                                                    insertbackground=COLORS['log_fg'], font=self.fonts['log'],
                                                    relief=tk.FLAT, wrap=tk.WORD)
         self.log_text.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
-        self.log("San sang! Nhap thong tin va bat dau danh gia.")
+        self._log("San sang! Nhap thong tin va bat dau danh gia.")
 
     def _refresh_home_account_list(self):
         for w in self.account_list_frame.winfo_children():
@@ -522,7 +544,7 @@ class ReviewBotApp:
         self._refresh_home_account_list()
         self.quick_email.delete(0, tk.END)
         self.quick_pass.delete(0, tk.END)
-        self.log(f"Da them tai khoan: {email}")
+        self._log(f"Da them tai khoan: {email}")
 
     def _remove_account(self, index):
         if 0 <= index < len(self.google_accounts):
@@ -532,7 +554,7 @@ class ReviewBotApp:
                 self.google_accounts_status.pop(email, None)
                 self._save_config()
                 self._refresh_home_account_list()
-                self.log(f"Da xoa tai khoan: {email}")
+                self._log(f"Da xoa tai khoan: {email}")
 
     def _save_home_config(self):
         try:
@@ -548,10 +570,10 @@ class ReviewBotApp:
             }
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            self.log("Da luu cau hinh!")
+            self._log("Da luu cau hinh!")
             messagebox.showinfo("Thanh cong", "Da luu cau hinh!")
         except Exception as e:
-            self.log(f"Loi luu cau hinh: {e}", True)
+            self._log(f"Loi luu cau hinh: {e}", True)
             messagebox.showerror("Loi", f"Khong the luu: {e}")
 
     def _load_home_config(self):
@@ -577,12 +599,12 @@ class ReviewBotApp:
                     self.comment_text.insert('1.0', cfg.get('last_comments', ''))
 
                 self._refresh_home_account_list()
-                self.log("Da tai cau hinh!")
+                self._log("Da tai cau hinh!")
                 messagebox.showinfo("Thanh cong", "Da tai cau hinh!")
             else:
                 messagebox.showwarning("Canh bao", "Khong tim thay file cau hinh!")
         except Exception as e:
-            self.log(f"Loi tai cau hinh: {e}", True)
+            self._log(f"Loi tai cau hinh: {e}", True)
             messagebox.showerror("Loi", f"Khong the tai: {e}")
 
     def _update_comment_hint(self, event=None):
@@ -1105,6 +1127,184 @@ class ReviewBotApp:
             tk.Label(sec_inner, text="Chua co danh gia nao", font=self.fonts['small'],
                      fg=COLORS['dim'], bg=COLORS['bg2']).pack(pady=20)
 
+    # ==================== NAP XU PAGE ====================
+
+    def _build_deposit_page(self):
+        page = tk.Frame(self.main_area, bg=COLORS['bg'])
+        page.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
+
+        tk.Label(page, text="Nap tien -> Xu", font=self.fonts['title'],
+                 fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W)
+        tk.Label(page, text="Ty le: 1.000d = 1 xu. Xu duoc cong tu dong sau khi SePay xac nhan chuyen khoan.",
+                 font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(2, 12))
+
+        self.deposit_xu_label = tk.Label(page, text="So xu hien co: ...", font=self.fonts['body'],
+                                          fg=COLORS['accent'], bg=COLORS['bg'])
+        self.deposit_xu_label.pack(anchor=tk.W, pady=(0, 10))
+
+        def on_profile(resp):
+            if self.current_page != 'deposit' or not self.deposit_xu_label.winfo_exists():
+                return
+            if 'error' not in resp:
+                self.deposit_xu_label.config(text=f"So xu hien co: {resp.get('xu', 0):,} \U0001FA99")
+                self.user_info = self.user_info or {}
+                self.user_info['xu'] = resp.get('xu', 0)
+                self._update_sidebar_stats()
+
+        self._async_api_call('/api/tool/profile', 'GET', on_done=on_profile)
+
+        form_frame = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
+        form_frame.pack(fill=tk.X, pady=(0, 12))
+        form_inner = tk.Frame(form_frame, bg=COLORS['bg2'], padx=14, pady=10)
+        form_inner.pack(fill=tk.X)
+
+        row = tk.Frame(form_inner, bg=COLORS['bg2'])
+        row.pack(fill=tk.X)
+        tk.Label(row, text="So tien (d):", font=self.fonts['small'],
+                 fg=COLORS['dim'], bg=COLORS['bg2']).pack(side=tk.LEFT)
+        self.deposit_amount_entry = tk.Entry(row, bg=COLORS['bg3'], fg=COLORS['fg'],
+                                              insertbackground=COLORS['fg'], font=self.fonts['body'],
+                                              relief=tk.FLAT, width=16)
+        self.deposit_amount_entry.pack(side=tk.LEFT, padx=8, ipady=4)
+        self.deposit_amount_entry.insert(0, "50000")
+
+        self.deposit_btn = tk.Button(row, text="Tao giao dich nap", command=self._start_deposit,
+                                      bg=COLORS['accent'], fg='#000', font=self.fonts['small'],
+                                      relief=tk.FLAT, padx=12, pady=4, cursor="hand2")
+        self.deposit_btn.pack(side=tk.LEFT, padx=8)
+
+        self.deposit_status_label = tk.Label(form_inner, text="", font=self.fonts['small'],
+                                              fg=COLORS['dim'], bg=COLORS['bg2'])
+        self.deposit_status_label.pack(anchor=tk.W, pady=(8, 0))
+
+        self.deposit_result_frame = tk.Frame(page, bg=COLORS['bg2'],
+                                              highlightbackground=COLORS['border'], highlightthickness=1)
+        self.deposit_result_frame.pack(fill=tk.BOTH, expand=True)
+
+    def _start_deposit(self):
+        try:
+            amount = int(self.deposit_amount_entry.get().strip())
+        except ValueError:
+            messagebox.showwarning("Canh bao", "So tien khong hop le!")
+            return
+        if amount < 10000:
+            messagebox.showwarning("Canh bao", "So tien toi thieu 10.000d!")
+            return
+
+        self.deposit_btn.config(state=tk.DISABLED)
+        self.deposit_status_label.config(text="Dang tao giao dich...", fg=COLORS['warning'])
+
+        def on_done(resp):
+            if not hasattr(self, 'deposit_btn') or not self.deposit_btn.winfo_exists():
+                return
+            self.deposit_btn.config(state=tk.NORMAL)
+            if 'error' in resp:
+                self.deposit_status_label.config(text=resp['error'], fg=COLORS['error'])
+                return
+            self.deposit_status_label.config(text="Da tao giao dich, xem thong tin ben duoi:", fg=COLORS['dim'])
+            self._show_deposit_result(resp)
+
+        self._async_api_call('/api/tool/deposit/create', 'POST', {'amount': amount}, on_done=on_done)
+
+    def _show_deposit_result(self, resp):
+        for w in self.deposit_result_frame.winfo_children():
+            w.destroy()
+
+        inner = tk.Frame(self.deposit_result_frame, bg=COLORS['bg2'], padx=16, pady=16)
+        inner.pack(fill=tk.BOTH, expand=True)
+
+        left = tk.Frame(inner, bg=COLORS['bg2'])
+        left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 20))
+        self.deposit_qr_label = tk.Label(left, bg=COLORS['bg2'], text="Dang tai QR...",
+                                          fg=COLORS['dim'], font=self.fonts['small'])
+        self.deposit_qr_label.pack()
+
+        right = tk.Frame(inner, bg=COLORS['bg2'])
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        info_lines = [
+            ("Ngan hang", resp.get('bank_code', '-')),
+            ("So tai khoan", resp.get('bank_account', '-')),
+            ("Chu tai khoan", resp.get('account_name', '-')),
+            ("So tien", f"{resp.get('amount', 0):,}d ({resp.get('xu', 0):,} xu)"),
+            ("Noi dung CK", resp.get('code', '-')),
+        ]
+        for label, value in info_lines:
+            r = tk.Frame(right, bg=COLORS['bg2'])
+            r.pack(fill=tk.X, pady=3)
+            tk.Label(r, text=f"{label}:", font=self.fonts['small'], fg=COLORS['dim'],
+                     bg=COLORS['bg2'], width=14, anchor=tk.W).pack(side=tk.LEFT)
+            color = COLORS['accent'] if label == "Noi dung CK" else COLORS['fg']
+            tk.Label(r, text=value, font=self.fonts['body'], fg=color,
+                     bg=COLORS['bg2'], anchor=tk.W).pack(side=tk.LEFT)
+
+        tk.Label(right, text="Nhap DUNG noi dung chuyen khoan de he thong tu dong cong xu!",
+                 font=self.fonts['tiny'], fg=COLORS['warning'], bg=COLORS['bg2'],
+                 wraplength=340, justify=tk.LEFT).pack(anchor=tk.W, pady=(8, 0))
+
+        self.deposit_wait_label = tk.Label(right, text="⏳ Dang cho thanh toan...", font=self.fonts['small'],
+                                            fg=COLORS['warning'], bg=COLORS['bg2'])
+        self.deposit_wait_label.pack(anchor=tk.W, pady=(10, 0))
+
+        qr_url = resp.get('qr_url')
+        if qr_url:
+            def fetch_qr():
+                try:
+                    req = urllib.request.Request(qr_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=15) as r:
+                        img_bytes = r.read()
+                    self.root.after(0, lambda: self._set_deposit_qr_image(img_bytes))
+                except Exception as e:
+                    err = str(e)
+                    self.root.after(0, lambda: self._set_deposit_qr_error(err))
+            threading.Thread(target=fetch_qr, daemon=True).start()
+        else:
+            self.deposit_qr_label.config(text="(Server chua cau hinh QR)")
+
+        self._poll_deposit_status(resp['tx_id'])
+
+    def _set_deposit_qr_image(self, img_bytes):
+        if not hasattr(self, 'deposit_qr_label') or not self.deposit_qr_label.winfo_exists():
+            return
+        try:
+            photo = tk.PhotoImage(data=img_bytes)
+            self.deposit_qr_label.config(image=photo, text="")
+            self.deposit_qr_label.image = photo  # giu reference tranh bi garbage collect
+        except Exception as e:
+            self.deposit_qr_label.config(text=f"Loi hien QR: {e}")
+
+    def _set_deposit_qr_error(self, err):
+        if hasattr(self, 'deposit_qr_label') and self.deposit_qr_label.winfo_exists():
+            self.deposit_qr_label.config(text=f"Khong tai duoc QR\n({err})")
+
+    def _poll_deposit_status(self, tx_id):
+        def on_status(resp):
+            if not hasattr(self, 'deposit_wait_label') or not self.deposit_wait_label.winfo_exists():
+                return  # nguoi dung da roi trang, dung polling
+
+            if 'error' in resp:
+                return
+
+            if resp.get('status') == 'completed':
+                self.deposit_wait_label.config(
+                    text=f"✅ Da nhan {resp.get('xu_amount', 0):,} xu!", fg=COLORS['success'])
+                self._async_api_call('/api/tool/profile', 'GET', on_done=self._on_profile_refresh_after_deposit)
+                return
+
+            self.root.after(3000, lambda: self._async_api_call(
+                f'/api/tool/deposit/status/{tx_id}', 'GET', on_done=on_status))
+
+        self._async_api_call(f'/api/tool/deposit/status/{tx_id}', 'GET', on_done=on_status)
+
+    def _on_profile_refresh_after_deposit(self, resp):
+        if 'error' in resp:
+            return
+        self.user_info = self.user_info or {}
+        self.user_info['xu'] = resp.get('xu', 0)
+        self._update_sidebar_stats()
+        if hasattr(self, 'deposit_xu_label') and self.deposit_xu_label.winfo_exists():
+            self.deposit_xu_label.config(text=f"So xu hien co: {resp.get('xu', 0):,} \U0001FA99")
+
     # ==================== ACCOUNT PAGE ====================
 
     def _build_account_page(self):
@@ -1114,33 +1314,48 @@ class ReviewBotApp:
         tk.Label(page, text="Thong tin tai khoan", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(0, 16))
 
-        resp = api_call('/api/tool/profile', 'GET', token=self.token, server_url=self.server_url)
-        if 'error' in resp:
-            tk.Label(page, text=f"Loi: {resp['error']}", fg=COLORS['error'], bg=COLORS['bg']).pack()
-            return
+        loading = tk.Label(page, text="Dang tai...", font=self.fonts['small'],
+                            fg=COLORS['dim'], bg=COLORS['bg'])
+        loading.pack(anchor=tk.W)
 
-        info_frame = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
-        info_frame.pack(fill=tk.X, pady=(0, 12))
-        info_inner = tk.Frame(info_frame, bg=COLORS['bg2'], padx=20, pady=16)
-        info_inner.pack(fill=tk.X)
+        def on_done(resp):
+            if self.current_page != 'account' or not page.winfo_exists():
+                return  # nguoi dung da chuyen trang khac trong luc cho
+            loading.destroy()
 
-        fields = [
-            ("Username", resp.get('username', '')),
-            ("Email", resp.get('email', '')),
-            ("Ho ten", resp.get('fullname', '')),
-            ("Vai tro", resp.get('role', '')),
-            ("Ngay tao", resp.get('created_at', '')),
-            ("Tong danh gia", str(resp.get('total_reviews', 0))),
-            ("Da danh gia (tool)", str(self.review_count)),
-        ]
+            if 'error' in resp:
+                tk.Label(page, text=f"Loi: {resp['error']}", fg=COLORS['error'], bg=COLORS['bg']).pack()
+                return
 
-        for label, value in fields:
-            row = tk.Frame(info_inner, bg=COLORS['bg2'])
-            row.pack(fill=tk.X, pady=3)
-            tk.Label(row, text=f"{label}:", font=self.fonts['small'], fg=COLORS['dim'],
-                     bg=COLORS['bg2'], width=16, anchor=tk.W).pack(side=tk.LEFT)
-            tk.Label(row, text=value, font=self.fonts['body'], fg=COLORS['fg'],
-                     bg=COLORS['bg2'], anchor=tk.W).pack(side=tk.LEFT)
+            self.user_info = self.user_info or {}
+            self.user_info['xu'] = resp.get('xu', 0)
+            self._update_sidebar_stats()
+
+            info_frame = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
+            info_frame.pack(fill=tk.X, pady=(0, 12))
+            info_inner = tk.Frame(info_frame, bg=COLORS['bg2'], padx=20, pady=16)
+            info_inner.pack(fill=tk.X)
+
+            fields = [
+                ("Username", resp.get('username', '')),
+                ("Email", resp.get('email', '')),
+                ("Ho ten", resp.get('fullname', '')),
+                ("Vai tro", resp.get('role', '')),
+                ("Ngay tao", resp.get('created_at', '')),
+                ("So xu", f"{resp.get('xu', 0):,} \U0001FA99"),
+                ("Tong danh gia", str(resp.get('total_reviews', 0))),
+                ("Da danh gia (tool)", str(self.review_count)),
+            ]
+
+            for label, value in fields:
+                row = tk.Frame(info_inner, bg=COLORS['bg2'])
+                row.pack(fill=tk.X, pady=3)
+                tk.Label(row, text=f"{label}:", font=self.fonts['small'], fg=COLORS['dim'],
+                         bg=COLORS['bg2'], width=16, anchor=tk.W).pack(side=tk.LEFT)
+                tk.Label(row, text=value, font=self.fonts['body'], fg=COLORS['fg'],
+                         bg=COLORS['bg2'], anchor=tk.W).pack(side=tk.LEFT)
+
+        self._async_api_call('/api/tool/profile', 'GET', on_done=on_done)
 
     # ==================== STATS PAGE ====================
 
@@ -1151,38 +1366,59 @@ class ReviewBotApp:
         tk.Label(page, text="Thong ke", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(0, 16))
 
-        resp = api_call('/api/tool/refresh', 'GET', token=self.token, server_url=self.server_url)
-        if 'error' in resp:
-            tk.Label(page, text=f"Loi: {resp['error']}", fg=COLORS['error'], bg=COLORS['bg']).pack()
-            return
+        loading = tk.Label(page, text="Dang tai...", font=self.fonts['small'],
+                            fg=COLORS['dim'], bg=COLORS['bg'])
+        loading.pack(anchor=tk.W)
 
-        stats = [
-            ("Tong da danh gia (server)", str(resp.get('total_reviews', 0)), COLORS['accent']),
-            ("Da danh gia (tool)", str(self.review_count), COLORS['success']),
-            ("Tai khoan GG", str(len(self.google_accounts)), COLORS['warning']),
-            ("Session hoat dong", str(sum(1 for v in self.google_accounts_status.values() if v)), COLORS['star']),
-        ]
+        def on_refresh_done(resp):
+            if self.current_page != 'stats' or not page.winfo_exists():
+                return
+            loading.destroy()
 
-        grid = tk.Frame(page, bg=COLORS['bg'])
-        grid.pack(fill=tk.X, pady=(0, 16))
+            if 'error' in resp:
+                tk.Label(page, text=f"Loi: {resp['error']}", fg=COLORS['error'], bg=COLORS['bg']).pack()
+                return
 
-        for i, (label, value, color) in enumerate(stats):
-            card = tk.Frame(grid, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
-            card.grid(row=i // 2, column=i % 2, padx=6, pady=6, sticky='nsew')
-            grid.columnconfigure(i % 2, weight=1)
+            self.user_info = self.user_info or {}
+            self.user_info['xu'] = resp.get('xu', 0)
+            self._update_sidebar_stats()
 
-            inner = tk.Frame(card, bg=COLORS['bg2'], padx=16, pady=16)
-            inner.pack(fill=tk.BOTH, expand=True)
-            tk.Label(inner, text=label, font=self.fonts['small'], fg=COLORS['dim'],
-                     bg=COLORS['bg2']).pack(anchor=tk.W)
-            tk.Label(inner, text=value, font=self.fonts['stat_sm'], fg=color,
-                     bg=COLORS['bg2']).pack(anchor=tk.W, pady=(4, 0))
+            stats = [
+                ("So xu hien co", f"{resp.get('xu', 0):,}", COLORS['success']),
+                ("Tong da danh gia (server)", str(resp.get('total_reviews', 0)), COLORS['accent']),
+                ("Da danh gia (tool)", str(self.review_count), COLORS['success']),
+                ("Tai khoan GG", str(len(self.google_accounts)), COLORS['warning']),
+                ("Session hoat dong", str(sum(1 for v in self.google_accounts_status.values() if v)), COLORS['star']),
+            ]
 
-        hist_resp = api_call('/api/tool/history', 'GET', token=self.token, server_url=self.server_url)
-        if 'error' not in hist_resp:
-            reviews = hist_resp.get('reviews', [])
-            if reviews:
-                sec = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
+            grid = tk.Frame(page, bg=COLORS['bg'])
+            grid.pack(fill=tk.X, pady=(0, 16))
+
+            for i, (label, value, color) in enumerate(stats):
+                card = tk.Frame(grid, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
+                card.grid(row=i // 2, column=i % 2, padx=6, pady=6, sticky='nsew')
+                grid.columnconfigure(i % 2, weight=1)
+
+                inner = tk.Frame(card, bg=COLORS['bg2'], padx=16, pady=16)
+                inner.pack(fill=tk.BOTH, expand=True)
+                tk.Label(inner, text=label, font=self.fonts['small'], fg=COLORS['dim'],
+                         bg=COLORS['bg2']).pack(anchor=tk.W)
+                tk.Label(inner, text=value, font=self.fonts['stat_sm'], fg=color,
+                         bg=COLORS['bg2']).pack(anchor=tk.W, pady=(4, 0))
+
+            hist_holder = tk.Frame(page, bg=COLORS['bg'])
+            hist_holder.pack(fill=tk.BOTH, expand=True)
+
+            def on_history_done(hist_resp):
+                if self.current_page != 'stats' or not hist_holder.winfo_exists():
+                    return
+                if 'error' in hist_resp:
+                    return
+                reviews = hist_resp.get('reviews', [])
+                if not reviews:
+                    return
+
+                sec = tk.Frame(hist_holder, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
                 sec.pack(fill=tk.BOTH, expand=True)
                 sec_inner = tk.Frame(sec, bg=COLORS['bg2'], padx=14, pady=10)
                 sec_inner.pack(fill=tk.BOTH, expand=True)
@@ -1199,6 +1435,10 @@ class ReviewBotApp:
                              fg=COLORS['fg'], bg=COLORS['bg3'], anchor=tk.W).pack(side=tk.LEFT, padx=8)
                     tk.Label(row, text=f"{'⭐'*r.get('stars',5)}",
                              font=self.fonts['small'], fg=COLORS['accent'], bg=COLORS['bg3']).pack(side=tk.RIGHT)
+
+            self._async_api_call('/api/tool/history', 'GET', on_done=on_history_done)
+
+        self._async_api_call('/api/tool/refresh', 'GET', on_done=on_refresh_done)
 
 
 if __name__ == "__main__":
