@@ -30,3 +30,6 @@ images/
 
 # Docker data
 data/
+
+# Secrets (SePay API key, etc.) - set real values only on the server
+.env

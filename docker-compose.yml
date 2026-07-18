@@ -8,6 +8,10 @@ services:
     environment:
       - FLASK_SECRET=CHANGE_ME_TO_RANDOM_STRING
       - DATABASE_PATH=/app/data/database.db
+      - SEPAY_ACCOUNT_NUMBER=${SEPAY_ACCOUNT_NUMBER:-}
+      - SEPAY_BANK_CODE=${SEPAY_BANK_CODE:-MBBank}
+      - SEPAY_ACCOUNT_NAME=${SEPAY_ACCOUNT_NAME:-}
+      - SEPAY_WEBHOOK_TOKEN=${SEPAY_WEBHOOK_TOKEN:-}
     volumes:
       - ./data:/app/data
 
