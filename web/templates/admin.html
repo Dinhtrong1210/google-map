@@ -59,6 +59,42 @@
                 <div class="number">{{ '{:,}'.format(total_xu) }} 🪙</div>
                 <div class="label">Tổng xu toàn hệ thống</div>
             </div>
+            {% if period != 'all' %}
+            <div class="stat-card" style="border-color:var(--accent);">
+                <div class="number" style="color:var(--accent);">{{ period_reviews_total }}</div>
+                <div class="label">Đánh giá {{ 'ngày' if period == 'day' else 'tháng' }} {{ period_label }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- FILTER -->
+        <div class="card" style="margin-bottom:20px;">
+            <div class="card-header">Bộ lọc thời gian</div>
+            <div class="card-body">
+                <form method="GET" action="{{ url_for('admin_dashboard') }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                    {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
+                    <div class="form-group" style="margin:0;">
+                        <label>Kiểu lọc</label>
+                        <select name="period" id="period-select" class="form-select" onchange="onPeriodChange()">
+                            <option value="all" {{ 'selected' if period == 'all' else '' }}>Tất cả thời gian</option>
+                            <option value="day" {{ 'selected' if period == 'day' else '' }}>Theo ngày</option>
+                            <option value="month" {{ 'selected' if period == 'month' else '' }}>Theo tháng</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="day-input-group" style="margin:0;{{ '' if period == 'day' else 'display:none;' }}">
+                        <label>Chọn ngày</label>
+                        <input type="date" name="period_date" value="{{ period_date }}">
+                    </div>
+                    <div class="form-group" id="month-input-group" style="margin:0;{{ '' if period == 'month' else 'display:none;' }}">
+                        <label>Chọn tháng</label>
+                        <input type="month" name="period_month" value="{{ period_month }}">
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary">Áp dụng</button>
+                    {% if period != 'all' %}
+                    <a href="{{ url_for('admin_dashboard', q=search) }}" class="btn btn-sm btn-outline">Xóa lọc</a>
+                    {% endif %}
+                </form>
+            </div>
         </div>
 
         <!-- STATS CHARTS -->
@@ -103,9 +139,12 @@
                 <span>Quản lý người dùng ({{ total_users }})</span>
                 <div class="search-box">
                     <form method="GET" action="{{ url_for('admin_dashboard') }}" style="display:flex;gap:8px;">
+                        <input type="hidden" name="period" value="{{ period }}">
+                        <input type="hidden" name="period_date" value="{{ period_date }}">
+                        <input type="hidden" name="period_month" value="{{ period_month }}">
                         <input type="text" name="q" value="{{ search }}" placeholder="Tìm username, email, SĐT..." class="search-input">
                         {% if search %}
-                        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-sm btn-outline">Xóa</a>
+                        <a href="{{ url_for('admin_dashboard', period=period, period_date=period_date, period_month=period_month) }}" class="btn btn-sm btn-outline">Xóa</a>
                         {% endif %}
                         <button type="submit" class="btn btn-sm btn-primary">Tìm</button>
                     </form>
@@ -120,7 +159,7 @@
                                 <th>Username</th>
                                 <th>Email</th>
                                 <th>SĐT</th>
-                                <th>Đánh giá</th>
+                                <th>Đánh giá{% if period != 'all' %} ({{ period_label }}){% endif %}</th>
                                 <th>Xu</th>
                                 <th>Vai trò</th>
                                 <th>Trạng thái</th>
@@ -135,7 +174,7 @@
                                 <td style="font-weight:600;">{{ u.username }}</td>
                                 <td>{{ u.email }}</td>
                                 <td>{{ u.phone or '-' }}</td>
-                                <td>{{ u.total_reviews }}</td>
+                                <td>{{ user_review_counts.get(u.id, 0) if period != 'all' else u.total_reviews }}</td>
                                 <td style="font-weight:600;color:var(--accent);">{{ '{:,}'.format(u.xu) }} 🪙</td>
                                 <td>
                                     {% if u.role == 'admin' %}
@@ -176,14 +215,15 @@
                     </table>
                 </div>
 
+                {% set period_qs = '&period=' + period + '&period_date=' + period_date + '&period_month=' + period_month %}
                 {% if total_pages > 1 %}
                 <div class="pagination">
                     {% if page > 1 %}
-                    <a href="?page={{ page-1 }}&q={{ search }}" class="btn btn-sm btn-outline">← Trước</a>
+                    <a href="?page={{ page-1 }}&q={{ search }}{{ period_qs }}" class="btn btn-sm btn-outline">← Trước</a>
                     {% endif %}
                     <span class="page-info">Trang {{ page }} / {{ total_pages }}</span>
                     {% if page < total_pages %}
-                    <a href="?page={{ page+1 }}&q={{ search }}" class="btn btn-sm btn-outline">Sau →</a>
+                    <a href="?page={{ page+1 }}&q={{ search }}{{ period_qs }}" class="btn btn-sm btn-outline">Sau →</a>
                     {% endif %}
                 </div>
                 {% endif %}
@@ -192,7 +232,9 @@
 
         <!-- REVIEWS SECTION -->
         <div id="reviews-section" class="card">
-            <div class="card-header">Đánh giá gần đây</div>
+            <div class="card-header">
+                Đánh giá {% if period != 'all' %}{{ 'ngày' if period == 'day' else 'tháng' }} {{ period_label }}{% else %}gần đây{% endif %}
+            </div>
             <div class="card-body">
                 <div class="table-wrap">
                     <table>
@@ -360,6 +402,12 @@
 <script>
 function closeModal(id) {
     document.getElementById(id).classList.remove('active');
+}
+
+function onPeriodChange() {
+    const val = document.getElementById('period-select').value;
+    document.getElementById('day-input-group').style.display = (val === 'day') ? '' : 'none';
+    document.getElementById('month-input-group').style.display = (val === 'month') ? '' : 'none';
 }
 
 function openEditUser(userId, username, email, fullname, phone, role, xu) {

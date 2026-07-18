@@ -957,6 +957,21 @@ def tool_history():
 
 # ==================== ADMIN ====================
 
+def _period_condition(column):
+    """Tra ve (sql_fragment, params) loc theo ngay/thang dua tren query string
+    hien tai (period=day|month + period_date|period_month), hoac (None, [])
+    neu khong loc (period=all hoac thieu tham so)."""
+    period = request.args.get('period', 'all')
+    period_date = request.args.get('period_date', '').strip()
+    period_month = request.args.get('period_month', '').strip()
+
+    if period == 'day' and period_date:
+        return f"DATE({column}) = ?", [period_date]
+    if period == 'month' and period_month:
+        return f"strftime('%Y-%m', {column}) = ?", [period_month]
+    return None, []
+
+
 @app.route('/admin')
 @admin_required
 def admin_dashboard():
@@ -965,6 +980,26 @@ def admin_dashboard():
     search = request.args.get('q', '').strip()
     page = max(1, request.args.get('page', 1, type=int))
     per_page = 20
+
+    period = request.args.get('period', 'all')
+    period_date = request.args.get('period_date', '').strip()
+    period_month = request.args.get('period_month', '').strip()
+    if period == 'day' and not period_date:
+        period = 'all'
+    if period == 'month' and not period_month:
+        period = 'all'
+
+    period_label = None
+    if period == 'day':
+        try:
+            period_label = datetime.strptime(period_date, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except ValueError:
+            period, period_label = 'all', None
+    elif period == 'month':
+        try:
+            period_label = datetime.strptime(period_month, '%Y-%m').strftime('%m/%Y')
+        except ValueError:
+            period, period_label = 'all', None
 
     if search:
         users = db.execute(
@@ -984,8 +1019,29 @@ def admin_dashboard():
 
     total_pages = max(1, (total_users_q + per_page - 1) // per_page)
 
+    # So danh gia theo ky loc, rieng cho tung user trong trang hien tai
+    user_review_counts = {}
+    user_ids = [u['id'] for u in users]
+    if user_ids:
+        cond_sql, cond_params = _period_condition('created_at')
+        placeholders = ','.join('?' * len(user_ids))
+        where_parts = [f"user_id IN ({placeholders})"]
+        params = list(user_ids)
+        if cond_sql:
+            where_parts.append(cond_sql)
+            params += cond_params
+        rows = db.execute(
+            f"SELECT user_id, COUNT(*) as cnt FROM reviews WHERE {' AND '.join(where_parts)} GROUP BY user_id",
+            params
+        ).fetchall()
+        user_review_counts = {r['user_id']: r['cnt'] for r in rows}
+
+    reviews_cond_sql, reviews_cond_params = _period_condition('r.created_at')
+    reviews_where = f" WHERE {reviews_cond_sql}" if reviews_cond_sql else ""
     reviews = db.execute(
-        'SELECT r.*, u.username FROM reviews r JOIN users u ON r.user_id = u.id ORDER BY r.created_at DESC LIMIT 30'
+        f'SELECT r.*, u.username FROM reviews r JOIN users u ON r.user_id = u.id{reviews_where} '
+        f'ORDER BY r.created_at DESC LIMIT 30',
+        reviews_cond_params
     ).fetchall()
     transactions = db.execute(
         'SELECT t.*, u.username FROM transactions t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC LIMIT 30'
@@ -994,6 +1050,13 @@ def admin_dashboard():
 
     total_users_count = db.execute('SELECT COUNT(*) FROM users WHERE role = "user"').fetchone()[0]
     total_reviews = db.execute('SELECT COUNT(*) FROM reviews').fetchone()[0]
+
+    period_reviews_total = None
+    if period != 'all':
+        pcond_sql, pcond_params = _period_condition('created_at')
+        period_reviews_total = db.execute(
+            f'SELECT COUNT(*) FROM reviews WHERE {pcond_sql}', pcond_params
+        ).fetchone()[0]
 
     reviews_today = db.execute(
         'SELECT COUNT(*) FROM reviews WHERE DATE(created_at) = DATE("now")'
@@ -1038,6 +1101,7 @@ def admin_dashboard():
 
     return render_template('admin.html',
                            users=users,
+                           user_review_counts=user_review_counts,
                            reviews=reviews,
                            transactions=transactions,
                            total_xu=total_xu,
@@ -1050,7 +1114,12 @@ def admin_dashboard():
                            months_12=months_12,
                            search=search,
                            page=page,
-                           total_pages=total_pages)
+                           total_pages=total_pages,
+                           period=period,
+                           period_date=period_date,
+                           period_month=period_month,
+                           period_label=period_label,
+                           period_reviews_total=period_reviews_total)
 
 
 @app.route('/admin/topup', methods=['POST'])
