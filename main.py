@@ -4,7 +4,7 @@ Login + Sidebar + API integration + Google Accounts Management
 """
 
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog
 from tkinter import font as tkfont
 import threading
 import os
@@ -40,6 +40,152 @@ COLORS = {
     'log_fg':   '#00ff88',
     'border':   '#1e3a5f',
 }
+
+
+def _shade(hex_color, factor):
+    """factor > 0: sang hon (ve phia trang); factor < 0: toi hon (ve phia den)."""
+    hex_color = hex_color.lstrip('#')
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    if factor >= 0:
+        r = r + (255 - r) * factor
+        g = g + (255 - g) * factor
+        b = b + (255 - b) * factor
+    else:
+        r = r * (1 + factor)
+        g = g * (1 + factor)
+        b = b * (1 + factor)
+    r, g, b = (max(0, min(255, int(v))) for v in (r, g, b))
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+
+def make_button(parent, text, command, bg, fg='#000', hover_amount=0.14, **kwargs):
+    """tk.Button voi hieu ung hover/press, thay cho nut phang tinh mac dinh."""
+    hover_bg = _shade(bg, hover_amount)
+    press_bg = _shade(bg, -0.14)
+    kwargs.setdefault('relief', tk.FLAT)
+    kwargs.setdefault('bd', 0)
+    kwargs.setdefault('cursor', 'hand2')
+    kwargs.setdefault('activebackground', press_bg)
+    kwargs.setdefault('activeforeground', fg)
+
+    btn = tk.Button(parent, text=text, command=command, bg=bg, fg=fg, **kwargs)
+
+    def on_enter(_e):
+        if str(btn['state']) != 'disabled':
+            btn.config(bg=hover_bg)
+
+    def on_leave(_e):
+        if str(btn['state']) != 'disabled':
+            btn.config(bg=bg)
+
+    btn.bind('<Enter>', on_enter)
+    btn.bind('<Leave>', on_leave)
+    return btn
+
+
+class StarRating(tk.Frame):
+    """Hang sao co the bam chon, thay cho tk.Radiobutton mac dinh (vong tron trang xau)."""
+
+    def __init__(self, parent, variable, bg=None, size=15, **kwargs):
+        bg = bg or COLORS['bg2']
+        super().__init__(parent, bg=bg, **kwargs)
+        self.variable = variable
+        self.labels = []
+        for i in range(1, 6):
+            lbl = tk.Label(self, text='★', font=('Segoe UI', size), bg=bg,
+                            fg=COLORS['dim'], cursor='hand2', padx=1)
+            lbl.pack(side=tk.LEFT)
+            lbl.bind('<Button-1>', lambda _e, v=i: self._select(v))
+            lbl.bind('<Enter>', lambda _e, v=i: self._preview(v))
+            lbl.bind('<Leave>', lambda _e: self._refresh())
+            self.labels.append(lbl)
+        self._refresh()
+
+    def _select(self, v):
+        self.variable.set(v)
+        self._refresh()
+
+    def _preview(self, v):
+        for i, lbl in enumerate(self.labels, start=1):
+            lbl.config(fg=COLORS['star'] if i <= v else COLORS['dim'])
+
+    def _refresh(self):
+        v = self.variable.get()
+        for i, lbl in enumerate(self.labels, start=1):
+            lbl.config(fg=COLORS['star'] if i <= v else COLORS['dim'])
+
+
+class NumberStepper(tk.Frame):
+    """Bo dieu khien [-] [so] [+] thay cho tk.Spinbox mac dinh (mui ten trang xau)."""
+
+    def __init__(self, parent, variable, from_=1, to=999, bg=None, width=3, **kwargs):
+        bg = bg or COLORS['bg2']
+        super().__init__(parent, bg=bg, **kwargs)
+        self.variable = variable
+        self.from_ = from_
+        self.to = to
+
+        minus = make_button(self, text='−', command=self._dec, bg=COLORS['bg4'], fg=COLORS['fg'],
+                             font=('Segoe UI', 9, 'bold'), padx=6, pady=1)
+        minus.pack(side=tk.LEFT)
+
+        self.entry = tk.Entry(self, textvariable=variable, width=width, justify=tk.CENTER,
+                               bg=COLORS['bg3'], fg=COLORS['fg'], insertbackground=COLORS['fg'],
+                               relief=tk.FLAT, font=('Segoe UI', 10))
+        self.entry.pack(side=tk.LEFT, padx=2, ipady=3)
+        self.entry.bind('<FocusOut>', lambda _e: self._clamp())
+
+        plus = make_button(self, text='+', command=self._inc, bg=COLORS['bg4'], fg=COLORS['fg'],
+                            font=('Segoe UI', 9, 'bold'), padx=6, pady=1)
+        plus.pack(side=tk.LEFT)
+
+    def _clamp(self):
+        try:
+            v = int(self.variable.get())
+        except (ValueError, tk.TclError):
+            v = self.from_
+        self.variable.set(max(self.from_, min(self.to, v)))
+
+    def _dec(self):
+        self._clamp()
+        self.variable.set(max(self.from_, self.variable.get() - 1))
+
+    def _inc(self):
+        self._clamp()
+        self.variable.set(min(self.to, self.variable.get() + 1))
+
+
+class ScrollText(tk.Frame):
+    """Text + thanh cuon ttk mau toi, thay cho scrolledtext.ScrolledText (scrollbar xam mac dinh xau)."""
+
+    def __init__(self, parent, height=4, bg=None, fg=None, font=None, wrap=tk.WORD,
+                 outer_bg=None, **kwargs):
+        bg = bg or COLORS['bg3']
+        fg = fg or COLORS['fg']
+        super().__init__(parent, bg=outer_bg or COLORS['bg2'])
+
+        self.text = tk.Text(self, height=height, bg=bg, fg=fg, insertbackground=fg,
+                             font=font, relief=tk.FLAT, wrap=wrap, **kwargs)
+        vsb = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.text.yview)
+        self.text.configure(yscrollcommand=vsb.set)
+
+        self.text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def get(self, *a, **kw):
+        return self.text.get(*a, **kw)
+
+    def insert(self, *a, **kw):
+        return self.text.insert(*a, **kw)
+
+    def delete(self, *a, **kw):
+        return self.text.delete(*a, **kw)
+
+    def see(self, *a, **kw):
+        return self.text.see(*a, **kw)
+
+    def bind(self, *a, **kw):
+        return self.text.bind(*a, **kw)
 
 
 def api_call(endpoint, method='GET', data=None, token=None, server_url=None):
@@ -79,6 +225,7 @@ class ReviewBotApp:
             self.root.iconbitmap(icon_path)
 
         self._setup_fonts()
+        self._setup_ttk_style()
 
         self.token = None
         self.user_info = None
@@ -111,6 +258,31 @@ class ReviewBotApp:
             'btn':      tkfont.Font(family="Segoe UI", size=10, weight="bold"),
             'big':      tkfont.Font(family="Segoe UI", size=20, weight="bold"),
         }
+
+    def _setup_ttk_style(self):
+        """Ap dung theme toi cho cac widget ttk (Scrollbar, Treeview) - mac dinh cua he dieu
+        hanh rat sang mau, xung khac voi giao dien toi cua app."""
+        style = ttk.Style()
+        style.theme_use('clam')
+
+        style.configure('Vertical.TScrollbar', background=COLORS['bg4'], troughcolor=COLORS['bg2'],
+                         bordercolor=COLORS['bg2'], arrowcolor=COLORS['dim'], relief=tk.FLAT,
+                         lightcolor=COLORS['bg4'], darkcolor=COLORS['bg4'],
+                         width=12, arrowsize=12)
+        style.map('Vertical.TScrollbar',
+                  background=[('active', COLORS['accent']), ('!active', COLORS['bg4'])],
+                  arrowcolor=[('active', COLORS['bg']), ('!active', COLORS['dim'])],
+                  lightcolor=[('active', COLORS['accent']), ('!active', COLORS['bg4'])],
+                  darkcolor=[('active', COLORS['accent']), ('!active', COLORS['bg4'])])
+
+        style.configure('Hist.Treeview', background=COLORS['bg3'], foreground=COLORS['fg'],
+                         fieldbackground=COLORS['bg3'], font=self.fonts['small'], rowheight=26,
+                         borderwidth=0)
+        style.configure('Hist.Treeview.Heading', background=COLORS['bg4'], foreground=COLORS['fg'],
+                         font=self.fonts['small'], relief=tk.FLAT)
+        style.map('Hist.Treeview.Heading', background=[('active', COLORS['bg4'])])
+        style.map('Hist.Treeview', background=[('selected', COLORS['active'])],
+                  foreground=[('selected', COLORS['accent'])])
 
     def _load_config(self):
         try:
@@ -184,53 +356,30 @@ class ReviewBotApp:
 
     def _show_login_screen(self):
         self._clear_window()
+        _container, form = self._build_auth_shell(f"Dang nhap  •  v{VERSION}")
 
-        container = tk.Frame(self.root, bg=COLORS['bg'])
-        container.place(relx=0.5, rely=0.5, anchor='center')
-
-        tk.Label(container, text="GOOGLE MAPS", font=self.fonts['big'],
-                 fg=COLORS['accent'], bg=COLORS['bg']).pack()
-        tk.Label(container, text="REVIEW BOT", font=self.fonts['title'],
-                 fg=COLORS['fg'], bg=COLORS['bg']).pack(pady=(0, 4))
-        tk.Label(container, text=f"v{VERSION}", font=self.fonts['small'],
-                 fg=COLORS['dim'], bg=COLORS['bg']).pack(pady=(0, 24))
-
-        form = tk.Frame(container, bg=COLORS['bg'], width=360)
-        form.pack()
-
-        tk.Label(form, text="Username hoac Email", font=self.fonts['small'],
-                 fg=COLORS['dim'], bg=COLORS['bg'], anchor=tk.W).pack(fill=tk.X)
-        self.login_user = tk.Entry(form, bg=COLORS['bg3'], fg=COLORS['fg'],
-                                   insertbackground=COLORS['fg'], font=self.fonts['body'],
-                                   relief=tk.FLAT)
-        self.login_user.pack(fill=tk.X, ipady=6, pady=(2, 10))
-
-        tk.Label(form, text="Mat khau", font=self.fonts['small'],
-                 fg=COLORS['dim'], bg=COLORS['bg'], anchor=tk.W).pack(fill=tk.X)
-        self.login_pass = tk.Entry(form, bg=COLORS['bg3'], fg=COLORS['fg'],
-                                   insertbackground=COLORS['fg'], font=self.fonts['body'],
-                                   show='*', relief=tk.FLAT)
-        self.login_pass.pack(fill=tk.X, ipady=6, pady=(2, 16))
+        self.login_user = self._labeled_entry(form, "Username hoac Email")
+        self.login_pass = self._labeled_entry(form, "Mat khau", show='*')
 
         self.login_status = tk.Label(form, text="", font=self.fonts['small'],
-                                     fg=COLORS['error'], bg=COLORS['bg'])
+                                     fg=COLORS['error'], bg=COLORS['bg2'])
         self.login_status.pack(pady=(0, 8))
 
-        self.login_btn = tk.Button(form, text="DANG NHAP", command=self._do_login,
+        self.login_btn = make_button(form, text="DANG NHAP", command=self._do_login,
                   bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
-                  relief=tk.FLAT, cursor="hand2", width=30)
-        self.login_btn.pack(ipady=4)
+                  width=30, pady=8)
+        self.login_btn.pack(pady=(4, 0))
 
-        links_row = tk.Frame(form, bg=COLORS['bg'])
-        links_row.pack(pady=(14, 0))
+        links_row = tk.Frame(form, bg=COLORS['bg2'])
+        links_row.pack(pady=(16, 0))
 
         reg_link = tk.Label(links_row, text="Dang ky tai khoan", font=self.fonts['tiny'],
-                             fg=COLORS['accent'], bg=COLORS['bg'], cursor="hand2")
+                             fg=COLORS['accent'], bg=COLORS['bg2'], cursor="hand2")
         reg_link.pack(side=tk.LEFT, padx=(0, 20))
         reg_link.bind('<Button-1>', lambda e: self._show_register_screen())
 
         forgot_link = tk.Label(links_row, text="Quen mat khau?", font=self.fonts['tiny'],
-                                fg=COLORS['dim'], bg=COLORS['bg'], cursor="hand2")
+                                fg=COLORS['dim'], bg=COLORS['bg2'], cursor="hand2")
         forgot_link.pack(side=tk.LEFT)
         forgot_link.bind('<Button-1>', lambda e: self._show_forgot_password_screen())
 
@@ -268,26 +417,46 @@ class ReviewBotApp:
 
     # ==================== REGISTER SCREEN ====================
 
-    def _labeled_entry(self, parent, label_text, show=None):
+    def _labeled_entry(self, parent, label_text, show=None, bg=None):
+        bg = bg or COLORS['bg2']
         tk.Label(parent, text=label_text, font=self.fonts['small'],
-                 fg=COLORS['dim'], bg=COLORS['bg'], anchor=tk.W).pack(fill=tk.X)
+                 fg=COLORS['dim'], bg=bg, anchor=tk.W).pack(fill=tk.X)
         e = tk.Entry(parent, bg=COLORS['bg3'], fg=COLORS['fg'],
                      insertbackground=COLORS['fg'], font=self.fonts['body'],
-                     relief=tk.FLAT, show=show)
+                     relief=tk.FLAT, show=show, highlightthickness=1,
+                     highlightbackground=COLORS['border'], highlightcolor=COLORS['accent'])
         e.pack(fill=tk.X, ipady=6, pady=(2, 10))
         return e
 
-    def _show_register_screen(self):
-        self._clear_window()
+    def _make_logo_badge(self, parent, size=64):
+        canvas = tk.Canvas(parent, width=size, height=size, bg=COLORS['bg'], highlightthickness=0)
+        canvas.create_oval(2, 2, size - 2, size - 2, fill=COLORS['accent'], outline='')
+        canvas.create_text(size / 2, size / 2, text='📍', font=('Segoe UI Emoji', int(size * 0.42)))
+        return canvas
 
+    def _build_auth_shell(self, subtitle):
+        """Khung dung chung cho man hinh Dang nhap / Dang ky / Quen mat khau:
+        logo + tieu de + the (card) bo vien chua form ben trong."""
         container = tk.Frame(self.root, bg=COLORS['bg'])
         container.place(relx=0.5, rely=0.5, anchor='center')
 
-        tk.Label(container, text="DANG KY TAI KHOAN", font=self.fonts['title'],
-                 fg=COLORS['accent'], bg=COLORS['bg']).pack(pady=(0, 20))
+        self._make_logo_badge(container).pack(pady=(0, 10))
+        tk.Label(container, text="GOOGLE MAPS REVIEW BOT", font=self.fonts['title'],
+                 fg=COLORS['fg'], bg=COLORS['bg']).pack()
+        tk.Label(container, text=subtitle, font=self.fonts['small'],
+                 fg=COLORS['dim'], bg=COLORS['bg']).pack(pady=(3, 22))
 
-        form = tk.Frame(container, bg=COLORS['bg'], width=360)
-        form.pack()
+        card = tk.Frame(container, bg=COLORS['bg2'], highlightbackground=COLORS['border'],
+                         highlightthickness=1)
+        card.pack()
+        card_body = tk.Frame(card, bg=COLORS['bg2'], padx=32, pady=28, width=360)
+        card_body.pack()
+
+        return container, card_body
+
+    def _show_register_screen(self):
+        self._clear_window()
+        _container, form = self._build_auth_shell("Tao tai khoan moi")
 
         self.reg_username = self._labeled_entry(form, "Username (toi thieu 3 ky tu)")
         self.reg_email = self._labeled_entry(form, "Email")
@@ -296,17 +465,17 @@ class ReviewBotApp:
         self.reg_password2 = self._labeled_entry(form, "Nhap lai mat khau", show='*')
 
         self.reg_status = tk.Label(form, text="", font=self.fonts['small'], fg=COLORS['error'],
-                                    bg=COLORS['bg'], wraplength=340, justify=tk.LEFT)
+                                    bg=COLORS['bg2'], wraplength=340, justify=tk.LEFT)
         self.reg_status.pack(pady=(0, 8))
 
-        self.reg_btn = tk.Button(form, text="DANG KY", command=self._do_register,
+        self.reg_btn = make_button(form, text="DANG KY", command=self._do_register,
                                   bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
-                                  relief=tk.FLAT, cursor="hand2", width=30)
-        self.reg_btn.pack(ipady=4)
+                                  width=30, pady=8)
+        self.reg_btn.pack(pady=(4, 0))
 
         back_link = tk.Label(form, text="< Quay lai dang nhap", font=self.fonts['tiny'],
-                              fg=COLORS['dim'], bg=COLORS['bg'], cursor="hand2")
-        back_link.pack(pady=(14, 0))
+                              fg=COLORS['dim'], bg=COLORS['bg2'], cursor="hand2")
+        back_link.pack(pady=(16, 0))
         back_link.bind('<Button-1>', lambda e: self._show_login_screen())
 
         self.reg_username.focus_set()
@@ -359,45 +528,35 @@ class ReviewBotApp:
     def _show_forgot_password_screen(self):
         self._clear_window()
 
-        container = tk.Frame(self.root, bg=COLORS['bg'])
-        container.place(relx=0.5, rely=0.5, anchor='center')
-
-        tk.Label(container, text="QUEN MAT KHAU", font=self.fonts['title'],
-                 fg=COLORS['accent'], bg=COLORS['bg']).pack(pady=(0, 6))
-        tk.Label(container, text="Nhap username hoac email da dang ky de nhan ma OTP qua email.",
-                 font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg'],
-                 wraplength=360, justify=tk.CENTER).pack(pady=(0, 16))
-
-        form = tk.Frame(container, bg=COLORS['bg'], width=360)
-        form.pack()
+        _container, form = self._build_auth_shell("Lay lai mat khau qua ma OTP gui ve email")
 
         self.forgot_identifier = self._labeled_entry(form, "Username hoac Email")
 
         self.forgot_status = tk.Label(form, text="", font=self.fonts['small'], fg=COLORS['error'],
-                                       bg=COLORS['bg'], wraplength=340, justify=tk.LEFT)
+                                       bg=COLORS['bg2'], wraplength=340, justify=tk.LEFT)
         self.forgot_status.pack(pady=(0, 8))
 
-        self.forgot_send_btn = tk.Button(form, text="GUI MA OTP", command=self._do_forgot_request,
+        self.forgot_send_btn = make_button(form, text="GUI MA OTP", command=self._do_forgot_request,
                                           bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
-                                          relief=tk.FLAT, cursor="hand2", width=30)
-        self.forgot_send_btn.pack(ipady=4)
+                                          width=30, pady=8)
+        self.forgot_send_btn.pack(pady=(4, 0))
 
         # Buoc 2: chi hien sau khi gui OTP thanh cong
-        self.forgot_step2_frame = tk.Frame(form, bg=COLORS['bg'])
+        self.forgot_step2_frame = tk.Frame(form, bg=COLORS['bg2'])
 
         self.forgot_otp = self._labeled_entry(self.forgot_step2_frame, "Ma OTP (6 so, gui qua email)")
         self.forgot_new_pass = self._labeled_entry(self.forgot_step2_frame, "Mat khau moi", show='*')
 
-        self.forgot_reset_btn = tk.Button(self.forgot_step2_frame, text="DAT LAI MAT KHAU",
+        self.forgot_reset_btn = make_button(self.forgot_step2_frame, text="DAT LAI MAT KHAU",
                                            command=self._do_reset_password,
                                            bg=COLORS['success'], fg='#000', font=self.fonts['btn'],
-                                           relief=tk.FLAT, cursor="hand2", width=30)
-        self.forgot_reset_btn.pack(ipady=4)
+                                           width=30, pady=8)
+        self.forgot_reset_btn.pack(pady=(4, 0))
 
-        back_link = tk.Label(form, text="< Quay lai dang nhap", font=self.fonts['tiny'],
-                              fg=COLORS['dim'], bg=COLORS['bg'], cursor="hand2")
-        back_link.pack(pady=(14, 0))
-        back_link.bind('<Button-1>', lambda e: self._show_login_screen())
+        self.forgot_back_link = tk.Label(form, text="< Quay lai dang nhap", font=self.fonts['tiny'],
+                              fg=COLORS['dim'], bg=COLORS['bg2'], cursor="hand2")
+        self.forgot_back_link.pack(pady=(16, 0))
+        self.forgot_back_link.bind('<Button-1>', lambda e: self._show_login_screen())
 
         self.forgot_identifier.focus_set()
 
@@ -420,7 +579,7 @@ class ReviewBotApp:
                 return
             self.forgot_status.config(text=resp.get('message', 'Da gui ma OTP, kiem tra email!'),
                                        fg=COLORS['success'])
-            self.forgot_step2_frame.pack(fill=tk.X)
+            self.forgot_step2_frame.pack(fill=tk.X, before=self.forgot_back_link)
             self.forgot_otp.focus_set()
 
         self._async_api_call('/api/tool/forgot-password', 'POST',
@@ -462,19 +621,31 @@ class ReviewBotApp:
     def _show_main_ui(self):
         self._clear_window()
 
-        sidebar = tk.Frame(self.root, bg=COLORS['sidebar'], width=200)
+        sidebar = tk.Frame(self.root, bg=COLORS['sidebar'], width=210)
         sidebar.pack(side=tk.LEFT, fill=tk.Y)
         sidebar.pack_propagate(False)
 
-        tk.Label(sidebar, text="REVIEW BOT", font=self.fonts['heading'],
-                 fg=COLORS['accent'], bg=COLORS['sidebar']).pack(pady=(16, 2), padx=16, anchor=tk.W)
-        tk.Label(sidebar, text=self.user_info.get('username', ''),
-                 font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['sidebar']).pack(padx=16, anchor=tk.W)
+        header = tk.Frame(sidebar, bg=COLORS['sidebar'])
+        header.pack(fill=tk.X, padx=16, pady=(18, 4))
+
+        avatar = tk.Canvas(header, width=36, height=36, bg=COLORS['sidebar'], highlightthickness=0)
+        avatar.create_oval(0, 0, 36, 36, fill=COLORS['accent'], outline='')
+        initial = (self.user_info.get('username') or '?')[0:1].upper() or '?'
+        avatar.create_text(18, 18, text=initial, font=('Segoe UI', 13, 'bold'), fill='#000000')
+        avatar.pack(side=tk.LEFT, padx=(0, 10))
+
+        name_col = tk.Frame(header, bg=COLORS['sidebar'])
+        name_col.pack(side=tk.LEFT)
+        tk.Label(name_col, text="REVIEW BOT", font=self.fonts['heading'],
+                 fg=COLORS['fg'], bg=COLORS['sidebar'], anchor=tk.W).pack(anchor=tk.W)
+        tk.Label(name_col, text=self.user_info.get('username', ''),
+                 font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['sidebar'], anchor=tk.W).pack(anchor=tk.W)
 
         sep = tk.Frame(sidebar, bg=COLORS['border'], height=1)
         sep.pack(fill=tk.X, padx=12, pady=12)
 
         self.sidebar_btns = {}
+        self.sidebar_accents = {}
         menu_items = [
             ('home', '🏠  Danh gia'),
             ('google_accounts', '📧  Tai khoan GG'),
@@ -485,26 +656,48 @@ class ReviewBotApp:
         ]
 
         for key, label in menu_items:
-            btn = tk.Label(sidebar, text=label, font=self.fonts['sidebar'],
+            row = tk.Frame(sidebar, bg=COLORS['sidebar'])
+            row.pack(fill=tk.X)
+
+            accent = tk.Frame(row, bg=COLORS['sidebar'], width=3)
+            accent.pack(side=tk.LEFT, fill=tk.Y)
+
+            btn = tk.Label(row, text=label, font=self.fonts['sidebar'],
                            fg=COLORS['dim'], bg=COLORS['sidebar'],
-                           cursor="hand2", anchor=tk.W, padx=16, pady=10)
-            btn.pack(fill=tk.X)
+                           cursor="hand2", anchor=tk.W, padx=13, pady=10)
+            btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             btn.bind('<Button-1>', lambda e, k=key: self._navigate(k))
+
+            def on_enter(_e, k=key):
+                if self.current_page != k:
+                    self.sidebar_btns[k].config(bg=COLORS['bg2'])
+            def on_leave(_e, k=key):
+                if self.current_page != k:
+                    self.sidebar_btns[k].config(bg=COLORS['sidebar'])
+            btn.bind('<Enter>', on_enter)
+            btn.bind('<Leave>', on_leave)
+
             self.sidebar_btns[key] = btn
+            self.sidebar_accents[key] = accent
 
         sep2 = tk.Frame(sidebar, bg=COLORS['border'], height=1)
         sep2.pack(fill=tk.X, padx=12, pady=12)
 
-        self.sidebar_stats = tk.Label(sidebar, text="", font=self.fonts['small'],
-                                       fg=COLORS['accent'], bg=COLORS['sidebar'], anchor=tk.W, padx=16)
+        stats_card = tk.Frame(sidebar, bg=COLORS['bg2'], highlightbackground=COLORS['border'],
+                               highlightthickness=1)
+        stats_card.pack(fill=tk.X, padx=12)
+        self.sidebar_stats = tk.Label(stats_card, text="", font=self.fonts['small'], justify=tk.LEFT,
+                                       fg=COLORS['accent'], bg=COLORS['bg2'], anchor=tk.W, padx=10, pady=8)
         self.sidebar_stats.pack(fill=tk.X)
 
         bottom = tk.Frame(sidebar, bg=COLORS['sidebar'])
-        bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=12, pady=12)
-        tk.Label(bottom, text="Dang xuat", font=self.fonts['tiny'],
-                 fg=COLORS['error'], bg=COLORS['sidebar'], cursor="hand2"
-                 ).pack(anchor=tk.W)
-        bottom.winfo_children()[-1].bind('<Button-1>', lambda e: self._logout())
+        bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=14)
+        logout_lbl = tk.Label(bottom, text="⏻  Dang xuat", font=self.fonts['tiny'],
+                 fg=COLORS['error'], bg=COLORS['sidebar'], cursor="hand2")
+        logout_lbl.pack(anchor=tk.W)
+        logout_lbl.bind('<Button-1>', lambda e: self._logout())
+        logout_lbl.bind('<Enter>', lambda e: logout_lbl.config(fg=_shade(COLORS['error'], 0.25)))
+        logout_lbl.bind('<Leave>', lambda e: logout_lbl.config(fg=COLORS['error']))
 
         self.main_area = tk.Frame(self.root, bg=COLORS['bg'])
         self.main_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -522,10 +715,15 @@ class ReviewBotApp:
     def _navigate(self, page):
         self.current_page = page
         for key, btn in self.sidebar_btns.items():
+            accent = self.sidebar_accents.get(key)
             if key == page:
                 btn.config(bg=COLORS['active'], fg=COLORS['accent'], font=self.fonts['sidebar_active'])
+                if accent:
+                    accent.config(bg=COLORS['accent'])
             else:
                 btn.config(bg=COLORS['sidebar'], fg=COLORS['dim'], font=self.fonts['sidebar'])
+                if accent:
+                    accent.config(bg=COLORS['sidebar'])
 
         for w in self.main_area.winfo_children():
             w.destroy()
@@ -578,24 +776,19 @@ class ReviewBotApp:
         tk.Label(row_opt, text="Sao:", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg2']).pack(side=tk.LEFT)
         self.star_var = tk.IntVar(value=5)
-        for s in range(1, 6):
-            tk.Radiobutton(row_opt, text=f"{'*'*s}", variable=self.star_var, value=s,
-                           bg=COLORS['bg2'], fg=COLORS['star'], selectcolor=COLORS['bg3'],
-                           activebackground=COLORS['bg2']).pack(side=tk.LEFT, padx=3)
+        StarRating(row_opt, self.star_var, bg=COLORS['bg2']).pack(side=tk.LEFT, padx=(4, 0))
 
         tk.Label(row_opt, text="  Chrome:", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg2']).pack(side=tk.LEFT, padx=(12, 0))
         self.chrome_count = tk.IntVar(value=1)
-        tk.Spinbox(row_opt, from_=1, to=10, textvariable=self.chrome_count, width=3,
-                   bg=COLORS['bg3'], fg=COLORS['fg'], font=self.fonts['body'],
-                   buttonbackground=COLORS['bg4'], relief=tk.FLAT).pack(side=tk.LEFT, padx=4)
+        NumberStepper(row_opt, self.chrome_count, from_=1, to=10,
+                      bg=COLORS['bg2']).pack(side=tk.LEFT, padx=4)
 
         tk.Label(row_opt, text="  So luong:", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg2']).pack(side=tk.LEFT, padx=(12, 0))
         self.target_count = tk.IntVar(value=5)
-        tk.Spinbox(row_opt, from_=1, to=500, textvariable=self.target_count, width=5,
-                   bg=COLORS['bg3'], fg=COLORS['fg'], font=self.fonts['body'],
-                   buttonbackground=COLORS['bg4'], relief=tk.FLAT).pack(side=tk.LEFT, padx=4)
+        NumberStepper(row_opt, self.target_count, from_=1, to=500, width=4,
+                      bg=COLORS['bg2']).pack(side=tk.LEFT, padx=4)
 
         sec_accounts = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
         sec_accounts.pack(fill=tk.X, pady=(0, 10))
@@ -629,7 +822,7 @@ class ReviewBotApp:
                                    relief=tk.FLAT, width=18, show='*')
         self.quick_pass.pack(side=tk.LEFT, padx=(4, 8), ipady=3)
 
-        tk.Button(add_acc_row, text="+ Them", command=self._quick_add_account,
+        make_button(add_acc_row, text="+ Them", command=self._quick_add_account,
                   bg=COLORS['accent'], fg='#000', font=self.fonts['tiny'],
                   relief=tk.FLAT, cursor="hand2").pack(side=tk.LEFT, padx=(0, 4))
 
@@ -644,9 +837,8 @@ class ReviewBotApp:
 
         tk.Label(inner2, text="Noi dung binh luan (moi dong = 1 danh gia):", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X)
-        self.comment_text = scrolledtext.ScrolledText(inner2, height=4, bg=COLORS['bg3'],
-                                                       fg=COLORS['fg'], insertbackground=COLORS['fg'],
-                                                       font=self.fonts['body'], relief=tk.FLAT, wrap=tk.WORD)
+        self.comment_text = ScrollText(inner2, height=4, bg=COLORS['bg3'], fg=COLORS['fg'],
+                                        font=self.fonts['body'], outer_bg=COLORS['bg2'])
         self.comment_text.pack(fill=tk.X, pady=(2, 4))
 
         self.comment_hint = tk.Label(inner2, text="0 dong", font=self.fonts['tiny'],
@@ -657,12 +849,12 @@ class ReviewBotApp:
         btn_row = tk.Frame(page, bg=COLORS['bg'])
         btn_row.pack(fill=tk.X, pady=(0, 10))
 
-        self.btn_start = tk.Button(btn_row, text=">> BAT DAU DANH GIA <<",
+        self.btn_start = make_button(btn_row, text=">> BAT DAU DANH GIA <<",
                                     command=self._start_review, bg=COLORS['success'], fg='#000',
                                     font=self.fonts['btn'], relief=tk.FLAT, padx=20, pady=6, cursor="hand2")
         self.btn_start.pack(side=tk.LEFT, padx=(0, 8))
 
-        self.btn_stop = tk.Button(btn_row, text="DUNG", command=self._stop_review,
+        self.btn_stop = make_button(btn_row, text="DUNG", command=self._stop_review,
                                    bg=COLORS['error'], fg='white', font=self.fonts['btn'],
                                    relief=tk.FLAT, padx=16, pady=6, cursor="hand2", state=tk.DISABLED)
         self.btn_stop.pack(side=tk.LEFT, padx=(0, 8))
@@ -670,15 +862,15 @@ class ReviewBotApp:
         save_btn_row = tk.Frame(page, bg=COLORS['bg'])
         save_btn_row.pack(fill=tk.X, pady=(0, 8))
 
-        tk.Button(save_btn_row, text="💾  Luu cau hinh", command=self._save_home_config,
+        make_button(save_btn_row, text="💾  Luu cau hinh", command=self._save_home_config,
                   bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['small'],
                   relief=tk.FLAT, padx=12, pady=4, cursor="hand2").pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(save_btn_row, text="📂  Tai cau hinh", command=self._load_home_config,
+        make_button(save_btn_row, text="📂  Tai cau hinh", command=self._load_home_config,
                   bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['small'],
                   relief=tk.FLAT, padx=12, pady=4, cursor="hand2").pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(btn_row, text="Xoa Chrome", command=self._kill_chrome,
+        make_button(btn_row, text="Xoa Chrome", command=self._kill_chrome,
                   bg=COLORS['warning'], fg='#000', font=self.fonts['small'],
                   relief=tk.FLAT, padx=8, pady=6, cursor="hand2").pack(side=tk.RIGHT)
 
@@ -689,9 +881,8 @@ class ReviewBotApp:
 
         tk.Label(log_inner, text="  LOG", font=self.fonts['heading'],
                  fg=COLORS['accent'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X)
-        self.log_text = scrolledtext.ScrolledText(log_inner, bg=COLORS['log_bg'], fg=COLORS['log_fg'],
-                                                   insertbackground=COLORS['log_fg'], font=self.fonts['log'],
-                                                   relief=tk.FLAT, wrap=tk.WORD)
+        self.log_text = ScrollText(log_inner, bg=COLORS['log_bg'], fg=COLORS['log_fg'],
+                                    font=self.fonts['log'], outer_bg=COLORS['bg2'])
         self.log_text.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
         self._log("San sang! Nhap thong tin va bat dau danh gia.")
 
@@ -1053,7 +1244,7 @@ class ReviewBotApp:
         header_row.pack(fill=tk.X, pady=(0, 12))
         tk.Label(header_row, text="Quan ly tai khoan Google", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(side=tk.LEFT)
-        tk.Button(header_row, text="🔄  Kiem tra lai session", command=self._refresh_all_sessions,
+        make_button(header_row, text="🔄  Kiem tra lai session", command=self._refresh_all_sessions,
                   bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['small'],
                   relief=tk.FLAT, padx=10, pady=4, cursor="hand2").pack(side=tk.RIGHT)
 
@@ -1072,21 +1263,24 @@ class ReviewBotApp:
                  bg=COLORS['bg2'], width=10, anchor=tk.W).pack(side=tk.LEFT)
         self.ga_email = tk.Entry(row1, bg=COLORS['bg3'], fg=COLORS['fg'],
                                  insertbackground=COLORS['fg'], font=self.fonts['body'],
-                                 relief=tk.FLAT, width=35)
+                                 relief=tk.FLAT, width=30)
         self.ga_email.pack(side=tk.LEFT, padx=(0, 16), ipady=4)
 
         tk.Label(row1, text="Mat khau:", font=self.fonts['small'], fg=COLORS['dim'],
                  bg=COLORS['bg2'], width=10, anchor=tk.W).pack(side=tk.LEFT)
         self.ga_pass = tk.Entry(row1, bg=COLORS['bg3'], fg=COLORS['fg'],
                                 insertbackground=COLORS['fg'], font=self.fonts['body'],
-                                relief=tk.FLAT, width=25, show='*')
-        self.ga_pass.pack(side=tk.LEFT, padx=(0, 16), ipady=4)
+                                relief=tk.FLAT, width=20, show='*')
+        self.ga_pass.pack(side=tk.LEFT, ipady=4)
 
-        tk.Button(row1, text="Them tai khoan", command=self._add_google_account,
+        row1b = tk.Frame(add_inner, bg=COLORS['bg2'])
+        row1b.pack(fill=tk.X, pady=(8, 6))
+
+        make_button(row1b, text="Them tai khoan", command=self._add_google_account,
                   bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
                   relief=tk.FLAT, cursor="hand2").pack(side=tk.LEFT, padx=(0, 8))
 
-        tk.Button(row1, text="Them nhieu (file)", command=self._import_accounts_file,
+        make_button(row1b, text="Them nhieu (file)", command=self._import_accounts_file,
                   bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['small'],
                   relief=tk.FLAT, padx=8, cursor="hand2").pack(side=tk.LEFT)
 
@@ -1296,13 +1490,6 @@ class ReviewBotApp:
                  font=self.fonts['heading'],
                  fg=COLORS['accent'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(0, 6))
 
-        style = ttk.Style()
-        style.theme_use('default')
-        style.configure("Hist.Treeview", background=COLORS['bg3'], foreground=COLORS['fg'],
-                        fieldbackground=COLORS['bg3'], font=self.fonts['small'], rowheight=24)
-        style.configure("Hist.Treeview.Heading", background=COLORS['bg4'], foreground=COLORS['fg'],
-                        font=self.fonts['small'])
-
         cols = ("time", "url", "stars", "status")
         tree = ttk.Treeview(sec_inner, columns=cols, show="headings", style="Hist.Treeview", height=12)
         tree.heading("time", text="Thoi gian")
@@ -1369,7 +1556,7 @@ class ReviewBotApp:
         self.deposit_amount_entry.pack(side=tk.LEFT, padx=8, ipady=4)
         self.deposit_amount_entry.insert(0, "50000")
 
-        self.deposit_btn = tk.Button(row, text="Tao giao dich nap", command=self._start_deposit,
+        self.deposit_btn = make_button(row, text="Tao giao dich nap", command=self._start_deposit,
                                       bg=COLORS['accent'], fg='#000', font=self.fonts['small'],
                                       relief=tk.FLAT, padx=12, pady=4, cursor="hand2")
         self.deposit_btn.pack(side=tk.LEFT, padx=8)
