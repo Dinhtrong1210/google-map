@@ -251,6 +251,7 @@ class ReviewBotApp:
             'body':     tkfont.Font(family="Segoe UI", size=10),
             'small':    tkfont.Font(family="Segoe UI", size=9),
             'tiny':     tkfont.Font(family="Segoe UI", size=8),
+            'link':     tkfont.Font(family="Segoe UI", size=8, underline=True),
             'log':      tkfont.Font(family="Consolas", size=9),
             'stat_num': tkfont.Font(family="Consolas", size=24, weight="bold"),
             'stat_sm':  tkfont.Font(family="Consolas", size=16, weight="bold"),
@@ -761,12 +762,12 @@ class ReviewBotApp:
         self._navigate('home')
 
     def _make_support_link(self, parent, text, url):
-        lbl = tk.Label(parent, text=text, font=self.fonts['tiny'], fg=COLORS['fg'],
+        lbl = tk.Label(parent, text=text, font=self.fonts['link'], fg=COLORS['accent'],
                        bg=COLORS['bg2'], cursor='hand2', anchor=tk.W)
         lbl.pack(fill=tk.X, pady=1)
         lbl.bind('<Button-1>', lambda e: webbrowser.open(url))
-        lbl.bind('<Enter>', lambda e: lbl.config(fg=COLORS['accent']))
-        lbl.bind('<Leave>', lambda e: lbl.config(fg=COLORS['fg']))
+        lbl.bind('<Enter>', lambda e: lbl.config(fg=_shade(COLORS['accent'], 0.3)))
+        lbl.bind('<Leave>', lambda e: lbl.config(fg=COLORS['accent']))
         return lbl
 
     def _update_sidebar_stats(self):
