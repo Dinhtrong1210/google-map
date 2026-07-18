@@ -356,7 +356,7 @@ class ReviewBotApp:
 
     def _show_login_screen(self):
         self._clear_window()
-        _container, form = self._build_auth_shell(f"Dang nhap  •  v{VERSION}")
+        _container, form = self._build_auth_shell("Dang nhap")
 
         self.login_user = self._labeled_entry(form, "Username hoac Email")
         self.login_pass = self._labeled_entry(form, "Mat khau", show='*')
@@ -434,17 +434,55 @@ class ReviewBotApp:
         canvas.create_text(size / 2, size / 2, text='📍', font=('Segoe UI Emoji', int(size * 0.42)))
         return canvas
 
-    def _build_auth_shell(self, subtitle):
+    def _build_auth_shell(self, heading):
         """Khung dung chung cho man hinh Dang nhap / Dang ky / Quen mat khau:
-        logo + tieu de + the (card) bo vien chua form ben trong."""
-        container = tk.Frame(self.root, bg=COLORS['bg'])
+        ben trai la panel gioi thieu thuong hieu, ben phai la the (card) chua form."""
+        left = tk.Frame(self.root, bg=COLORS['sidebar'], width=420)
+        left.pack(side=tk.LEFT, fill=tk.Y)
+        left.pack_propagate(False)
+
+        left_inner = tk.Frame(left, bg=COLORS['sidebar'])
+        left_inner.place(relx=0.5, rely=0.5, anchor='center', width=310)
+
+        self._make_logo_badge(left_inner, size=64).pack(pady=(0, 14))
+        tk.Label(left_inner, text="GOOGLE MAPS\nREVIEW BOT", font=self.fonts['title'],
+                 fg=COLORS['fg'], bg=COLORS['sidebar'], justify=tk.CENTER).pack()
+        tk.Label(left_inner, text=f"v{VERSION}", font=self.fonts['tiny'], fg=COLORS['dim'],
+                 bg=COLORS['sidebar']).pack(pady=(2, 18))
+
+        intro = ("Cong cu tu dong hoa danh gia Google Maps: quan ly hang loat "
+                 "tai khoan Google, chay song song nhieu Chrome, theo doi lich su "
+                 "va thong ke ngay tren desktop.")
+        tk.Label(left_inner, text=intro, font=self.fonts['small'], fg=COLORS['dim'],
+                 bg=COLORS['sidebar'], wraplength=300, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 16))
+
+        for feat in ("Da tai khoan Google", "Chay song song nhieu Chrome", "Nap xu tu dong qua SePay"):
+            row = tk.Frame(left_inner, bg=COLORS['sidebar'])
+            row.pack(anchor=tk.W, pady=2)
+            tk.Label(row, text="✓", font=self.fonts['small'], fg=COLORS['accent'],
+                     bg=COLORS['sidebar']).pack(side=tk.LEFT, padx=(0, 6))
+            tk.Label(row, text=feat, font=self.fonts['small'], fg=COLORS['fg'],
+                     bg=COLORS['sidebar']).pack(side=tk.LEFT)
+
+        tk.Frame(left_inner, bg=COLORS['border'], height=1).pack(fill=tk.X, pady=20)
+
+        tk.Label(left_inner, text="San pham duoc phat trien & van hanh boi",
+                 font=self.fonts['tiny'], fg=COLORS['dim'], bg=COLORS['sidebar'],
+                 anchor=tk.W, justify=tk.LEFT).pack(fill=tk.X)
+        tk.Label(left_inner, text="DJ MEDIA", font=self.fonts['heading'],
+                 fg=COLORS['accent'], bg=COLORS['sidebar'], anchor=tk.W).pack(fill=tk.X, pady=(2, 0))
+        tk.Label(left_inner, text="Giai phap tu dong hoa & ho tro mang xa hoi",
+                 font=self.fonts['tiny'], fg=COLORS['dim'], bg=COLORS['sidebar'],
+                 anchor=tk.W, justify=tk.LEFT).pack(fill=tk.X)
+
+        right = tk.Frame(self.root, bg=COLORS['bg'])
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        container = tk.Frame(right, bg=COLORS['bg'])
         container.place(relx=0.5, rely=0.5, anchor='center')
 
-        self._make_logo_badge(container).pack(pady=(0, 10))
-        tk.Label(container, text="GOOGLE MAPS REVIEW BOT", font=self.fonts['title'],
-                 fg=COLORS['fg'], bg=COLORS['bg']).pack()
-        tk.Label(container, text=subtitle, font=self.fonts['small'],
-                 fg=COLORS['dim'], bg=COLORS['bg']).pack(pady=(3, 22))
+        tk.Label(container, text=heading, font=self.fonts['title'],
+                 fg=COLORS['fg'], bg=COLORS['bg']).pack(pady=(0, 20))
 
         card = tk.Frame(container, bg=COLORS['bg2'], highlightbackground=COLORS['border'],
                          highlightthickness=1)
@@ -528,7 +566,11 @@ class ReviewBotApp:
     def _show_forgot_password_screen(self):
         self._clear_window()
 
-        _container, form = self._build_auth_shell("Lay lai mat khau qua ma OTP gui ve email")
+        _container, form = self._build_auth_shell("Quen mat khau")
+
+        tk.Label(form, text="Nhap username hoac email da dang ky de nhan ma OTP qua email.",
+                 font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg2'],
+                 wraplength=300, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 14))
 
         self.forgot_identifier = self._labeled_entry(form, "Username hoac Email")
 
