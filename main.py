@@ -18,6 +18,7 @@ from datetime import datetime
 from review_bot import GoogleMapsReviewBot
 
 VERSION = "4.0.0"
+REVIEW_COST_XU_DEFAULT = 12  # gia tri hien thi mac dinh, server la nguon xac thuc thuc te
 CONFIG_FILE = "tool_config.json"
 PROFILES_DIR = os.path.join(os.getcwd(), "profiles")
 
@@ -240,6 +241,7 @@ class ReviewBotApp:
         self.google_accounts_status = {}
         self.review_count = 0
         self._is_reviewing = False
+        self._out_of_xu = False
 
         self._load_config()
         self._show_login_screen()
@@ -821,7 +823,8 @@ class ReviewBotApp:
 
         tk.Label(page, text="Chay danh gia", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W)
-        tk.Label(page, text=f"Da danh gia: {self.review_count} | Tai khoan GG: {len(self.google_accounts)}",
+        tk.Label(page, text=f"Da danh gia: {self.review_count} | Tai khoan GG: {len(self.google_accounts)} | "
+                             f"Chi phi: {REVIEW_COST_XU_DEFAULT} xu/danh gia",
                  font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(2, 12))
 
         sec1 = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
@@ -1105,18 +1108,47 @@ class ReviewBotApp:
             messagebox.showerror("Loi", "Khong du tai khoan de danh gia!")
             return
 
+        self.btn_start.config(state=tk.DISABLED)
+
+        def on_profile(resp):
+            self.btn_start.config(state=tk.NORMAL)
+            if 'error' in resp:
+                messagebox.showerror("Loi", f"Khong kiem tra duoc so xu: {resp['error']}")
+                return
+
+            xu = resp.get('xu', 0)
+            cost = resp.get('review_cost_xu', REVIEW_COST_XU_DEFAULT)
+            if xu < cost:
+                self._prompt_topup(
+                    f"Ban dang co {xu} xu, can toi thieu {cost} xu de chay 1 danh gia.\n\n"
+                    f"Nap them xu ngay bay gio?")
+                return
+
+            self._confirm_and_start_review(url, comment_lines, stars, target, chrome_count,
+                                            actual, actual_chrome, cost)
+
+        self._async_api_call('/api/tool/profile', 'GET', on_done=on_profile)
+
+    def _prompt_topup(self, message):
+        if messagebox.askyesno("Khong du xu", message):
+            self._navigate('deposit')
+
+    def _confirm_and_start_review(self, url, comment_lines, stars, target, chrome_count,
+                                   actual, actual_chrome, cost):
         if not messagebox.askyesno("Xac nhan",
                 f"Muc tieu: {target} danh gia\n"
                 f"Tai khoan: {len(self.google_accounts)}\n"
                 f"Se chay: {actual} danh gia\n"
-                f"Chrome cung luc: {actual_chrome}\n\n"
+                f"Chrome cung luc: {actual_chrome}\n"
+                f"Chi phi: {cost} xu/danh gia (toi da {actual * cost} xu)\n\n"
                 f"Bat dau?"):
             return
 
         self.log_text.delete('1.0', tk.END)
         self._log(f"BAT DAU: muc tieu {target} | {len(self.google_accounts)} tai khoan")
-        self._log(f"Se chay {actual} danh gia | {actual_chrome} Chrome song song")
+        self._log(f"Se chay {actual} danh gia | {actual_chrome} Chrome song song | {cost} xu/danh gia")
         self._stop_event.clear()
+        self._out_of_xu = False
         self.btn_start.config(state=tk.DISABLED)
         self.btn_stop.config(state=tk.NORMAL)
         self._is_reviewing = True
@@ -1172,6 +1204,18 @@ class ReviewBotApp:
                         self._log(f"  [Dang nhap moi]")
                     self._log(f"  Noi dung: {comment[:60]}...")
 
+                charge_resp = api_call('/api/tool/review-charge', 'POST',
+                                       token=self.token, server_url=self.server_url)
+                if 'error' in charge_resp:
+                    with lock:
+                        self._log(f"  Khong du xu! Con {charge_resp.get('xu', 0)} xu "
+                                   f"(can {charge_resp.get('cost', REVIEW_COST_XU_DEFAULT)} xu/danh gia). Dung lai.", True)
+                        session_failed += 1
+                        self._out_of_xu = True
+                    work_queue.task_done()
+                    continue
+
+                review_success = False
                 bot = None
                 try:
                     bot = GoogleMapsReviewBot(
@@ -1237,6 +1281,7 @@ class ReviewBotApp:
                             session_failed += 1
                         continue
 
+                    review_success = True
                     with lock:
                         session_reviewed += 1
                         self.review_count += 1
@@ -1252,6 +1297,9 @@ class ReviewBotApp:
                     with lock:
                         session_failed += 1
                 finally:
+                    if not review_success:
+                        api_call('/api/tool/review-refund', 'POST',
+                                 token=self.token, server_url=self.server_url)
                     if bot:
                         try:
                             bot.close_browser()
@@ -1281,6 +1329,11 @@ class ReviewBotApp:
         self._is_reviewing = False
         self.root.after(0, lambda: self.btn_start.config(state=tk.NORMAL))
         self.root.after(0, lambda: self.btn_stop.config(state=tk.DISABLED))
+
+        if self._out_of_xu:
+            self.root.after(0, lambda: self._prompt_topup(
+                "Ban da het xu giua chung nen mot so danh gia bi bo qua.\n\n"
+                "Nap them xu ngay bay gio?"))
 
     def _stop_review(self):
         if messagebox.askyesno("Xac nhan", "Dung tat ca?"):

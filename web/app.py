@@ -38,6 +38,7 @@ DATABASE = os.environ.get(
 XU_RATE = 1000  # 1.000d = 1 xu
 DEPOSIT_CODE_PREFIX = 'NAP'
 DEPOSIT_MIN_AMOUNT = 10000
+REVIEW_COST_XU = 12  # so xu tru moi lan chay 1 danh gia thanh cong qua tool
 
 SEPAY_ACCOUNT_NUMBER = os.environ.get('SEPAY_ACCOUNT_NUMBER', '')
 SEPAY_BANK_CODE = os.environ.get('SEPAY_BANK_CODE', 'MBBank')
@@ -448,6 +449,28 @@ def _deposit_status(user_id, tx_id):
     }, 200
 
 
+def _charge_review_xu(user_id):
+    """Tru REVIEW_COST_XU xu mot cach nguyen tu (WHERE xu >= cost tranh rang buoc am
+    khi nhieu Chrome chay song song cung tru xu cua cung 1 user)."""
+    db = get_db()
+    cur = db.execute(
+        'UPDATE users SET xu = xu - ? WHERE id = ? AND xu >= ?',
+        (REVIEW_COST_XU, user_id, REVIEW_COST_XU)
+    )
+    db.commit()
+    row = db.execute('SELECT xu FROM users WHERE id = ?', (user_id,)).fetchone()
+    xu = row['xu'] if row else 0
+    return cur.rowcount > 0, xu
+
+
+def _refund_review_xu(user_id):
+    db = get_db()
+    db.execute('UPDATE users SET xu = xu + ? WHERE id = ?', (REVIEW_COST_XU, user_id))
+    db.commit()
+    row = db.execute('SELECT xu FROM users WHERE id = ?', (user_id,)).fetchone()
+    return row['xu'] if row else 0
+
+
 @app.route('/api/deposit/create', methods=['POST'])
 @login_required
 def deposit_create():
@@ -785,6 +808,7 @@ def tool_profile():
         'role': row['role'],
         'total_reviews': row['total_reviews'],
         'xu': row['xu'],
+        'review_cost_xu': REVIEW_COST_XU,
         'is_active': row['is_active'],
         'created_at': row['created_at'],
         'last_login': row['last_login']
@@ -839,6 +863,28 @@ def tool_deposit_status(tx_id):
     return jsonify(body), status
 
 
+@app.route('/api/tool/review-charge', methods=['POST'])
+def tool_review_charge():
+    user_id = _tool_auth()
+    if not user_id:
+        return jsonify({'error': 'Session expired'}), 401
+
+    ok, xu = _charge_review_xu(user_id)
+    if not ok:
+        return jsonify({'error': 'Khong du xu', 'xu': xu, 'cost': REVIEW_COST_XU}), 402
+    return jsonify({'status': 'ok', 'xu': xu, 'cost': REVIEW_COST_XU})
+
+
+@app.route('/api/tool/review-refund', methods=['POST'])
+def tool_review_refund():
+    user_id = _tool_auth()
+    if not user_id:
+        return jsonify({'error': 'Session expired'}), 401
+
+    xu = _refund_review_xu(user_id)
+    return jsonify({'status': 'ok', 'xu': xu})
+
+
 @app.route('/api/tool/review-done', methods=['POST'])
 def tool_review_done():
     user_id = _tool_auth()
@@ -852,7 +898,7 @@ def tool_review_done():
     db = get_db()
     db.execute(
         'INSERT INTO reviews (user_id, place_url, comment, stars, cost, status) VALUES (?, ?, ?, ?, ?, ?)',
-        (user_id, data.get('place_url', ''), data.get('comment', ''), data.get('stars', 5), 0, 'completed')
+        (user_id, data.get('place_url', ''), data.get('comment', ''), data.get('stars', 5), REVIEW_COST_XU, 'completed')
     )
     db.execute('UPDATE users SET total_reviews = total_reviews + 1 WHERE id = ?', (user_id,))
     db.commit()
