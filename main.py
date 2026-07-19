@@ -776,6 +776,14 @@ class ReviewBotApp:
         self._update_sidebar_stats()
         self._navigate('home')
 
+    def _bind_mousewheel(self, hover_widget, canvas):
+        """Cho phep cuon canvas bang lan chuot, chi khi con tro dang o tren hover_widget
+        (tranh anh huong scroll cua cac vung khac trong app vi bind_all la toan cuc)."""
+        def _on_wheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        hover_widget.bind('<Enter>', lambda e: hover_widget.bind_all('<MouseWheel>', _on_wheel))
+        hover_widget.bind('<Leave>', lambda e: hover_widget.unbind_all('<MouseWheel>'))
+
     def _make_support_link(self, parent, text, url):
         lbl = tk.Label(parent, text=text, font=self.fonts['link'], fg=COLORS['accent'],
                        bg=COLORS['bg2'], cursor='hand2', anchor=tk.W)
@@ -967,6 +975,26 @@ class ReviewBotApp:
         self.log_text.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
         self._log("Sẵn sàng! Nhập thông tin và bắt đầu đánh giá.")
 
+    def _build_account_row(self, parent, i, acc):
+        row = tk.Frame(parent, bg=COLORS['bg3'], padx=6, pady=3)
+        row.pack(fill=tk.X, pady=1)
+
+        email = acc.get('email', '')
+        logged_in, color = self._get_profile_status_text(email)
+        status_char = "●" if self.google_accounts_status.get(email, False) else "○"
+
+        tk.Label(row, text=f"{status_char}", font=self.fonts['small'], fg=color,
+                 bg=COLORS['bg3'], width=2).pack(side=tk.LEFT)
+        tk.Label(row, text=email, font=self.fonts['small'], fg=COLORS['fg'],
+                 bg=COLORS['bg3'], anchor=tk.W).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(row, text=logged_in, font=self.fonts['tiny'], fg=color,
+                 bg=COLORS['bg3']).pack(side=tk.LEFT, padx=(0, 8))
+
+        del_btn = tk.Label(row, text="[Xóa]", font=self.fonts['tiny'], fg=COLORS['error'],
+                           bg=COLORS['bg3'], cursor="hand2")
+        del_btn.pack(side=tk.RIGHT)
+        del_btn.bind('<Button-1>', lambda e, idx=i: self._remove_account(idx))
+
     def _refresh_home_account_list(self):
         for w in self.account_list_frame.winfo_children():
             w.destroy()
@@ -976,28 +1004,43 @@ class ReviewBotApp:
                      font=self.fonts['tiny'], fg=COLORS['dim'], bg=COLORS['bg2']).pack(anchor=tk.W)
             return
 
-        for i, acc in enumerate(self.google_accounts):
-            row = tk.Frame(self.account_list_frame, bg=COLORS['bg3'], padx=6, pady=3)
-            row.pack(fill=tk.X, pady=1)
+        total = len(self.google_accounts)
+        limit = getattr(self, '_home_acc_limit', 10)
+        shown = self.google_accounts[:limit]
 
-            email = acc.get('email', '')
-            logged_in, color = self._get_profile_status_text(email)
-            status_char = "●" if self.google_accounts_status.get(email, False) else "○"
+        if len(shown) > 10:
+            # Danh sach da mo rong qua 1 trang - bo vao khung co gioi han chieu cao,
+            # cuon duoc bang lan chuot, tranh day trang chinh xuong qua dai.
+            list_holder = tk.Frame(self.account_list_frame, bg=COLORS['bg2'])
+            list_holder.pack(fill=tk.X)
+            canvas = tk.Canvas(list_holder, bg=COLORS['bg2'], highlightthickness=0, height=260)
+            vsb = ttk.Scrollbar(list_holder, orient=tk.VERTICAL, command=canvas.yview)
+            rows_frame = tk.Frame(canvas, bg=COLORS['bg2'])
+            rows_frame.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+            canvas.create_window((0, 0), window=rows_frame, anchor=tk.NW)
+            canvas.configure(yscrollcommand=vsb.set)
+            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            vsb.pack(side=tk.RIGHT, fill=tk.Y)
+            self._bind_mousewheel(canvas, canvas)
+            row_parent = rows_frame
+        else:
+            row_parent = self.account_list_frame
 
-            tk.Label(row, text=f"{status_char}", font=self.fonts['small'], fg=color,
-                     bg=COLORS['bg3'], width=2).pack(side=tk.LEFT)
-            tk.Label(row, text=email, font=self.fonts['small'], fg=COLORS['fg'],
-                     bg=COLORS['bg3'], anchor=tk.W).pack(side=tk.LEFT, padx=(0, 8))
-            tk.Label(row, text=logged_in, font=self.fonts['tiny'], fg=color,
-                     bg=COLORS['bg3']).pack(side=tk.LEFT, padx=(0, 8))
+        for i, acc in enumerate(shown):
+            self._build_account_row(row_parent, i, acc)
 
-            del_btn = tk.Label(row, text="[Xóa]", font=self.fonts['tiny'], fg=COLORS['error'],
-                               bg=COLORS['bg3'], cursor="hand2")
-            del_btn.pack(side=tk.RIGHT)
-            del_btn.bind('<Button-1>', lambda e, idx=i: self._remove_account(idx))
+        if total > len(shown):
+            more_lbl = tk.Label(self.account_list_frame, text=f"▼ Xem thêm ({total - len(shown)} tài khoản)",
+                                 font=self.fonts['tiny'], fg=COLORS['accent'], bg=COLORS['bg2'], cursor="hand2")
+            more_lbl.pack(anchor=tk.W, pady=(4, 0))
+            more_lbl.bind('<Button-1>', lambda e: self._expand_home_accounts())
 
         if self.acc_count_label:
-            self.acc_count_label.config(text=f"({len(self.google_accounts)} tài khoản)")
+            self.acc_count_label.config(text=f"({total} tài khoản)")
+
+    def _expand_home_accounts(self):
+        self._home_acc_limit = getattr(self, '_home_acc_limit', 10) + 10
+        self._refresh_home_account_list()
 
     def _quick_add_account(self):
         email = self.quick_email.get().strip()
@@ -1449,6 +1492,7 @@ class ReviewBotApp:
 
         self.ga_list_canvas.pack(fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._bind_mousewheel(self.ga_list_canvas, self.ga_list_canvas)
 
         self._refresh_google_accounts_list()
 
