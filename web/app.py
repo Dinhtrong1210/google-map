@@ -1043,8 +1043,13 @@ def admin_dashboard():
         f'ORDER BY r.created_at DESC LIMIT 30',
         reviews_cond_params
     ).fetchall()
+
+    tx_cond_sql, tx_cond_params = _period_condition('t.created_at')
+    tx_where = f" WHERE {tx_cond_sql}" if tx_cond_sql else ""
     transactions = db.execute(
-        'SELECT t.*, u.username FROM transactions t JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC LIMIT 30'
+        f'SELECT t.*, u.username FROM transactions t JOIN users u ON t.user_id = u.id{tx_where} '
+        f'ORDER BY t.created_at DESC LIMIT 30',
+        tx_cond_params
     ).fetchall()
     total_xu = db.execute('SELECT COALESCE(SUM(xu), 0) FROM users').fetchone()[0]
 
@@ -1052,11 +1057,24 @@ def admin_dashboard():
     total_reviews = db.execute('SELECT COUNT(*) FROM reviews').fetchone()[0]
 
     period_reviews_total = None
+    period_deposit_total = None
+    period_deposit_xu = None
+    period_deposit_count = None
     if period != 'all':
         pcond_sql, pcond_params = _period_condition('created_at')
         period_reviews_total = db.execute(
             f'SELECT COUNT(*) FROM reviews WHERE {pcond_sql}', pcond_params
         ).fetchone()[0]
+
+        deposit_cond_sql, deposit_cond_params = _period_condition('created_at')
+        deposit_row = db.execute(
+            f"SELECT COALESCE(SUM(amount), 0) as total_amount, COALESCE(SUM(xu_amount), 0) as total_xu, COUNT(*) as cnt "
+            f"FROM transactions WHERE status = 'completed' AND type IN ('deposit', 'admin_topup') AND {deposit_cond_sql}",
+            deposit_cond_params
+        ).fetchone()
+        period_deposit_total = deposit_row['total_amount']
+        period_deposit_xu = deposit_row['total_xu']
+        period_deposit_count = deposit_row['cnt']
 
     reviews_today = db.execute(
         'SELECT COUNT(*) FROM reviews WHERE DATE(created_at) = DATE("now")'
@@ -1119,7 +1137,10 @@ def admin_dashboard():
                            period_date=period_date,
                            period_month=period_month,
                            period_label=period_label,
-                           period_reviews_total=period_reviews_total)
+                           period_reviews_total=period_reviews_total,
+                           period_deposit_total=period_deposit_total,
+                           period_deposit_xu=period_deposit_xu,
+                           period_deposit_count=period_deposit_count)
 
 
 @app.route('/admin/topup', methods=['POST'])
