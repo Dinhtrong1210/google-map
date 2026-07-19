@@ -1198,11 +1198,8 @@ class ReviewBotApp:
             messagebox.showerror("Lỗi", "Nhập ít nhất 1 tài khoản Google!\nVào trang 'Tài khoản GG' để thêm.")
             return
 
-        actual = min(target, len(self.google_accounts))
-        actual_chrome = min(chrome_count, actual)
-        if actual <= 0:
-            messagebox.showerror("Lỗi", "Không đủ tài khoản để đánh giá!")
-            return
+        total_accounts = len(self.google_accounts)
+        actual_chrome = max(1, min(chrome_count, target, total_accounts))
 
         self.btn_start.config(state=tk.DISABLED)
 
@@ -1221,7 +1218,7 @@ class ReviewBotApp:
                 return
 
             self._confirm_and_start_review(url, comment_lines, stars, target, chrome_count,
-                                            actual, actual_chrome, cost)
+                                            total_accounts, actual_chrome, cost)
 
         self._async_api_call('/api/tool/profile', 'GET', on_done=on_profile)
 
@@ -1230,19 +1227,20 @@ class ReviewBotApp:
             self._navigate('deposit')
 
     def _confirm_and_start_review(self, url, comment_lines, stars, target, chrome_count,
-                                   actual, actual_chrome, cost):
+                                   total_accounts, actual_chrome, cost):
         if not messagebox.askyesno("Xác nhận",
-                f"Mục tiêu: {target} đánh giá\n"
-                f"Tài khoản: {len(self.google_accounts)}\n"
-                f"Sẽ chạy: {actual} đánh giá\n"
+                f"Mục tiêu: {target} đánh giá THÀNH CÔNG\n"
+                f"Tài khoản khả dụng: {total_accounts}\n"
                 f"Chrome cùng lúc: {actual_chrome}\n"
-                f"Chi phí: {cost} xu/đánh giá (tối đa {actual * cost} xu)\n\n"
+                f"Chi phí: {cost} xu/đánh giá (tối đa {target * cost} xu nếu đủ tài khoản)\n\n"
+                f"Nếu 1 tài khoản bị lỗi/không đăng nhập được, tool sẽ tự động\n"
+                f"thử tài khoản khác cho đến khi đủ mục tiêu (hoặc hết tài khoản/hết xu).\n\n"
                 f"Bắt đầu?"):
             return
 
         self.log_text.delete('1.0', tk.END)
-        self._log(f"BẮT ĐẦU: mục tiêu {target} | {len(self.google_accounts)} tài khoản")
-        self._log(f"Sẽ chạy {actual} đánh giá | {actual_chrome} Chrome song song | {cost} xu/đánh giá")
+        self._log(f"BẮT ĐẦU: mục tiêu {target} đánh giá thành công | {total_accounts} tài khoản khả dụng")
+        self._log(f"{actual_chrome} Chrome song song | {cost} xu/đánh giá")
         self._stop_event.clear()
         self._out_of_xu = False
         self.btn_start.config(state=tk.DISABLED)
@@ -1255,33 +1253,39 @@ class ReviewBotApp:
         thread.start()
 
     def _run_review(self, url, comment_lines, stars, target, chrome_count):
-        import queue
-
         session_reviewed = 0
         session_failed = 0
         lock = threading.Lock()
+        next_index = [0]  # con tro dung chung, dung list de sua duoc trong closure
 
         shuffled_comments = comment_lines[:]
         random.shuffle(shuffled_comments)
         shuffled_accounts = self.google_accounts[:]
         random.shuffle(shuffled_accounts)
+        total_accounts = len(shuffled_accounts)
 
-        actual = min(target, len(shuffled_accounts))
-        actual_chrome = min(chrome_count, actual)
+        actual_chrome = max(1, min(chrome_count, target, total_accounts))
 
-        work_queue = queue.Queue()
-        for i in range(actual):
-            account = shuffled_accounts[i]
-            comment = shuffled_comments[i % len(shuffled_comments)]
-            work_queue.put((i, account, comment))
+        def get_next_account():
+            """Lay tai khoan tiep theo chua thu qua. Tra ve None neu da du muc tieu,
+            het tai khoan, het xu, hoac nguoi dung bam Dung - bao hieu worker nen dung."""
+            with lock:
+                if (session_reviewed >= target or self._out_of_xu
+                        or self._stop_event.is_set() or next_index[0] >= total_accounts):
+                    return None
+                idx = next_index[0]
+                next_index[0] += 1
+                account = shuffled_accounts[idx]
+                comment = shuffled_comments[idx % len(shuffled_comments)]
+                return idx, account, comment
 
         def worker(worker_id):
             nonlocal session_reviewed, session_failed
-            while not work_queue.empty() and not self._stop_event.is_set():
-                try:
-                    idx, account, comment = work_queue.get_nowait()
-                except queue.Empty:
+            while True:
+                item = get_next_account()
+                if item is None:
                     break
+                idx, account, comment = item
 
                 email = account.get('email', '')
                 password = account.get('password', '')
@@ -1292,7 +1296,7 @@ class ReviewBotApp:
 
                 with lock:
                     total_done = session_reviewed + session_failed
-                    self._log(f"\n--- [{total_done+1}/{actual}] Chrome-{worker_id} ---")
+                    self._log(f"\n--- [Lần {total_done+1}, mục tiêu {target} thành công] Chrome-{worker_id} ---")
                     self._log(f"  TK: {email}")
                     if already_logged:
                         self._log(f"  [Session cũ]")
@@ -1308,7 +1312,6 @@ class ReviewBotApp:
                                    f"(cần {charge_resp.get('cost', REVIEW_COST_XU_DEFAULT)} xu/đánh giá). Dừng lại.", True)
                         session_failed += 1
                         self._out_of_xu = True
-                    work_queue.task_done()
                     continue
 
                 review_success = False
@@ -1386,7 +1389,7 @@ class ReviewBotApp:
                              {'place_url': url, 'comment': comment, 'stars': stars},
                              token=self.token, server_url=self.server_url)
                     with lock:
-                        self._log(f"  THÀNH CÔNG! [{session_reviewed}/{actual}] | Tool: {self.review_count}")
+                        self._log(f"  THÀNH CÔNG! [{session_reviewed}/{target}] | Tool: {self.review_count}")
 
                 except Exception as e:
                     self._log(f"  Lỗi: {e}", True)
@@ -1401,7 +1404,6 @@ class ReviewBotApp:
                             bot.close_browser()
                         except:
                             pass
-                    work_queue.task_done()
 
         threads = []
         for i in range(actual_chrome):
@@ -1416,8 +1418,8 @@ class ReviewBotApp:
         self._log("\n" + "=" * 40)
         if session_reviewed >= target:
             self._log(f"ĐẠT MỤC TIÊU! {session_reviewed}/{target}")
-        elif session_reviewed + session_failed >= actual:
-            self._log(f"HẾT TÀI KHOẢN! {session_reviewed} thành công, {session_failed} thất bại / {target}")
+        elif next_index[0] >= total_accounts:
+            self._log(f"HẾT TÀI KHOẢN! {session_reviewed} thành công, {session_failed} thất bại / mục tiêu {target}")
         else:
             self._log(f"DỪNG! {session_reviewed}/{target}")
         self._log(f"Tổng tool: {self.review_count} đánh giá")
