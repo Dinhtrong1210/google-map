@@ -45,7 +45,7 @@ COLORS = {
 
 
 def _shade(hex_color, factor):
-    """factor > 0: sang hon (ve phia trang); factor < 0: toi hon (ve phia den)."""
+    """factor > 0: sáng hơn (về phía trắng); factor < 0: tối hơn (về phía đen)."""
     hex_color = hex_color.lstrip('#')
     r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
     if factor >= 0:
@@ -61,7 +61,7 @@ def _shade(hex_color, factor):
 
 
 def make_button(parent, text, command, bg, fg='#000', hover_amount=0.14, **kwargs):
-    """tk.Button voi hieu ung hover/press, thay cho nut phang tinh mac dinh."""
+    """tk.Button với hiệu ứng hover/press, thay cho nút phẳng tĩnh mặc định."""
     hover_bg = _shade(bg, hover_amount)
     press_bg = _shade(bg, -0.14)
     kwargs.setdefault('relief', tk.FLAT)
@@ -86,7 +86,7 @@ def make_button(parent, text, command, bg, fg='#000', hover_amount=0.14, **kwarg
 
 
 class StarRating(tk.Frame):
-    """Hang sao co the bam chon, thay cho tk.Radiobutton mac dinh (vong tron trang xau)."""
+    """Hàng sao có thể bấm chọn, thay cho tk.Radiobutton mặc định (vòng tròn trắng xấu)."""
 
     def __init__(self, parent, variable, bg=None, size=15, **kwargs):
         bg = bg or COLORS['bg2']
@@ -118,7 +118,7 @@ class StarRating(tk.Frame):
 
 
 class NumberStepper(tk.Frame):
-    """Bo dieu khien [-] [so] [+] thay cho tk.Spinbox mac dinh (mui ten trang xau)."""
+    """Bộ điều khiển [-] [số] [+] thay cho tk.Spinbox mặc định (mũi tên trắng xấu)."""
 
     def __init__(self, parent, variable, from_=1, to=999, bg=None, width=3, **kwargs):
         bg = bg or COLORS['bg2']
@@ -158,7 +158,7 @@ class NumberStepper(tk.Frame):
 
 
 class ScrollText(tk.Frame):
-    """Text + thanh cuon ttk mau toi, thay cho scrolledtext.ScrolledText (scrollbar xam mac dinh xau)."""
+    """Text + thanh cuộn ttk màu tối, thay cho scrolledtext.ScrolledText (scrollbar xám mặc định xấu)."""
 
     def __init__(self, parent, height=4, bg=None, fg=None, font=None, wrap=tk.WORD,
                  outer_bg=None, **kwargs):
@@ -264,8 +264,8 @@ class ReviewBotApp:
         }
 
     def _setup_ttk_style(self):
-        """Ap dung theme toi cho cac widget ttk (Scrollbar, Treeview) - mac dinh cua he dieu
-        hanh rat sang mau, xung khac voi giao dien toi cua app."""
+        """Áp dụng theme tối cho các widget ttk (Scrollbar, Treeview) - mặc định của hệ điều
+        hành rất sáng màu, xung khắc với giao diện tối của app."""
         style = ttk.Style()
         style.theme_use('clam')
 
@@ -317,7 +317,7 @@ class ReviewBotApp:
             pass
 
     def _async_api_call(self, endpoint, method='GET', data=None, on_done=None):
-        """Chay api_call() o thread nen, roi goi on_done(resp) tren main thread qua root.after()."""
+        """Chạy api_call() ở thread nền, rồi gọi on_done(resp) trên main thread qua root.after()."""
         def worker():
             resp = api_call(endpoint, method, data, token=self.token, server_url=self.server_url)
             if on_done:
@@ -349,8 +349,8 @@ class ReviewBotApp:
 
     def _get_profile_status_text(self, email):
         if self.google_accounts_status.get(email, False):
-            return "Da dang nhap", COLORS['success']
-        return "Chua dang nhap", COLORS['dim']
+            return "Đã đăng nhập", COLORS['success']
+        return "Chưa đăng nhập", COLORS['dim']
 
     def _clear_window(self):
         for w in self.root.winfo_children():
@@ -360,16 +360,16 @@ class ReviewBotApp:
 
     def _show_login_screen(self):
         self._clear_window()
-        _container, form = self._build_auth_shell("Dang nhap")
+        _container, form = self._build_auth_shell("Đăng nhập")
 
-        self.login_user = self._labeled_entry(form, "Username hoac Email")
-        self.login_pass = self._labeled_entry(form, "Mat khau", show='*')
+        self.login_user = self._labeled_entry(form, "Username hoặc Email")
+        self.login_pass = self._labeled_entry(form, "Mật khẩu", show='*')
 
         self.login_status = tk.Label(form, text="", font=self.fonts['small'],
                                      fg=COLORS['error'], bg=COLORS['bg2'])
         self.login_status.pack(pady=(0, 8))
 
-        self.login_btn = make_button(form, text="DANG NHAP", command=self._do_login,
+        self.login_btn = make_button(form, text="ĐĂNG NHẬP", command=self._do_login,
                   bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
                   width=30, pady=8)
         self.login_btn.pack(pady=(4, 0))
@@ -377,12 +377,12 @@ class ReviewBotApp:
         links_row = tk.Frame(form, bg=COLORS['bg2'])
         links_row.pack(pady=(16, 0))
 
-        reg_link = tk.Label(links_row, text="Dang ky tai khoan", font=self.fonts['tiny'],
+        reg_link = tk.Label(links_row, text="Đăng ký tài khoản", font=self.fonts['tiny'],
                              fg=COLORS['accent'], bg=COLORS['bg2'], cursor="hand2")
         reg_link.pack(side=tk.LEFT, padx=(0, 20))
         reg_link.bind('<Button-1>', lambda e: self._show_register_screen())
 
-        forgot_link = tk.Label(links_row, text="Quen mat khau?", font=self.fonts['tiny'],
+        forgot_link = tk.Label(links_row, text="Quên mật khẩu?", font=self.fonts['tiny'],
                                 fg=COLORS['dim'], bg=COLORS['bg2'], cursor="hand2")
         forgot_link.pack(side=tk.LEFT)
         forgot_link.bind('<Button-1>', lambda e: self._show_forgot_password_screen())
@@ -395,11 +395,11 @@ class ReviewBotApp:
         password = self.login_pass.get().strip()
 
         if not username or not password:
-            self.login_status.config(text="Nhap day du thong tin!")
+            self.login_status.config(text="Nhập đầy đủ thông tin!")
             return
 
         self.server_url = SERVER_URL
-        self.login_status.config(text="Dang ket noi...", fg=COLORS['warning'])
+        self.login_status.config(text="Đang kết nối...", fg=COLORS['warning'])
         self.login_btn.config(state=tk.DISABLED)
 
         def on_done(resp):
@@ -439,8 +439,8 @@ class ReviewBotApp:
         return canvas
 
     def _build_auth_shell(self, heading):
-        """Khung dung chung cho man hinh Dang nhap / Dang ky / Quen mat khau:
-        ben trai la panel gioi thieu thuong hieu, ben phai la the (card) chua form."""
+        """Khung dùng chung cho màn hình Đăng nhập / Đăng ký / Quên mật khẩu:
+        bên trái là panel giới thiệu thương hiệu, bên phải là thẻ (card) chứa form."""
         left = tk.Frame(self.root, bg=COLORS['sidebar'], width=420)
         left.pack(side=tk.LEFT, fill=tk.Y)
         left.pack_propagate(False)
@@ -454,13 +454,13 @@ class ReviewBotApp:
         tk.Label(left_inner, text=f"v{VERSION}", font=self.fonts['tiny'], fg=COLORS['dim'],
                  bg=COLORS['sidebar']).pack(pady=(2, 18))
 
-        intro = ("Cong cu tu dong hoa danh gia Google Maps: quan ly hang loat "
-                 "tai khoan Google, chay song song nhieu Chrome, theo doi lich su "
-                 "va thong ke ngay tren desktop.")
+        intro = ("Công cụ tự động hoá đánh giá Google Maps: quản lý hàng loạt "
+                 "tài khoản Google, chạy song song nhiều Chrome, theo dõi lịch sử "
+                 "và thống kê ngay trên desktop.")
         tk.Label(left_inner, text=intro, font=self.fonts['small'], fg=COLORS['dim'],
                  bg=COLORS['sidebar'], wraplength=300, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 16))
 
-        for feat in ("Da tai khoan Google", "Chay song song nhieu Chrome", "Nap xu tu dong qua SePay"):
+        for feat in ("Đa tài khoản Google", "Chạy song song nhiều Chrome", "Nạp xu tự động qua SePay"):
             row = tk.Frame(left_inner, bg=COLORS['sidebar'])
             row.pack(anchor=tk.W, pady=2)
             tk.Label(row, text="✓", font=self.fonts['small'], fg=COLORS['accent'],
@@ -470,14 +470,14 @@ class ReviewBotApp:
 
         tk.Frame(left_inner, bg=COLORS['border'], height=1).pack(fill=tk.X, pady=20)
 
-        tk.Label(left_inner, text="San pham duoc phat trien & van hanh boi",
+        tk.Label(left_inner, text="Sản phẩm được phát triển & vận hành bởi",
                  font=self.fonts['tiny'], fg=COLORS['dim'], bg=COLORS['sidebar'],
                  anchor=tk.W, justify=tk.LEFT).pack(fill=tk.X)
         tk.Label(left_inner, text="DJ MEDIA", font=self.fonts['heading'],
                  fg=COLORS['accent'], bg=COLORS['sidebar'], anchor=tk.W).pack(fill=tk.X, pady=(2, 0))
-        tk.Label(left_inner, text="Giai phap tu dong hoa & ho tro mang xa hoi",
+        tk.Label(left_inner, text="Chuyên hỗ trợ DVFB, Quảng cáo Marketing,\nĐào tạo học viên, Thiết kế Website\n& Phát triển các Tools Auto tự động",
                  font=self.fonts['tiny'], fg=COLORS['dim'], bg=COLORS['sidebar'],
-                 anchor=tk.W, justify=tk.LEFT).pack(fill=tk.X)
+                 anchor=tk.W, justify=tk.LEFT, wraplength=300).pack(fill=tk.X)
 
         right = tk.Frame(self.root, bg=COLORS['bg'])
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -498,24 +498,24 @@ class ReviewBotApp:
 
     def _show_register_screen(self):
         self._clear_window()
-        _container, form = self._build_auth_shell("Tao tai khoan moi")
+        _container, form = self._build_auth_shell("Tạo tài khoản mới")
 
-        self.reg_username = self._labeled_entry(form, "Username (toi thieu 3 ky tu)")
+        self.reg_username = self._labeled_entry(form, "Username (tối thiểu 3 ký tự)")
         self.reg_email = self._labeled_entry(form, "Email")
-        self.reg_fullname = self._labeled_entry(form, "Ho ten (khong bat buoc)")
-        self.reg_password = self._labeled_entry(form, "Mat khau (toi thieu 6 ky tu)", show='*')
-        self.reg_password2 = self._labeled_entry(form, "Nhap lai mat khau", show='*')
+        self.reg_fullname = self._labeled_entry(form, "Họ tên (không bắt buộc)")
+        self.reg_password = self._labeled_entry(form, "Mật khẩu (tối thiểu 6 ký tự)", show='*')
+        self.reg_password2 = self._labeled_entry(form, "Nhập lại mật khẩu", show='*')
 
         self.reg_status = tk.Label(form, text="", font=self.fonts['small'], fg=COLORS['error'],
                                     bg=COLORS['bg2'], wraplength=340, justify=tk.LEFT)
         self.reg_status.pack(pady=(0, 8))
 
-        self.reg_btn = make_button(form, text="DANG KY", command=self._do_register,
+        self.reg_btn = make_button(form, text="ĐĂNG KÝ", command=self._do_register,
                                   bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
                                   width=30, pady=8)
         self.reg_btn.pack(pady=(4, 0))
 
-        back_link = tk.Label(form, text="< Quay lai dang nhap", font=self.fonts['tiny'],
+        back_link = tk.Label(form, text="← Quay lại đăng nhập", font=self.fonts['tiny'],
                               fg=COLORS['dim'], bg=COLORS['bg2'], cursor="hand2")
         back_link.pack(pady=(16, 0))
         back_link.bind('<Button-1>', lambda e: self._show_login_screen())
@@ -530,23 +530,23 @@ class ReviewBotApp:
         password2 = self.reg_password2.get()
 
         if not username or not email or not password:
-            self.reg_status.config(text="Nhap day du thong tin!", fg=COLORS['error'])
+            self.reg_status.config(text="Nhập đầy đủ thông tin!", fg=COLORS['error'])
             return
         if len(username) < 3:
-            self.reg_status.config(text="Username toi thieu 3 ky tu!", fg=COLORS['error'])
+            self.reg_status.config(text="Username tối thiểu 3 ký tự!", fg=COLORS['error'])
             return
         if len(password) < 6:
-            self.reg_status.config(text="Mat khau toi thieu 6 ky tu!", fg=COLORS['error'])
+            self.reg_status.config(text="Mật khẩu tối thiểu 6 ký tự!", fg=COLORS['error'])
             return
         if password != password2:
-            self.reg_status.config(text="Mat khau nhap lai khong khop!", fg=COLORS['error'])
+            self.reg_status.config(text="Mật khẩu nhập lại không khớp!", fg=COLORS['error'])
             return
         if '@' not in email:
-            self.reg_status.config(text="Email khong hop le!", fg=COLORS['error'])
+            self.reg_status.config(text="Email không hợp lệ!", fg=COLORS['error'])
             return
 
         self.server_url = SERVER_URL
-        self.reg_status.config(text="Dang dang ky...", fg=COLORS['warning'])
+        self.reg_status.config(text="Đang đăng ký...", fg=COLORS['warning'])
         self.reg_btn.config(state=tk.DISABLED)
 
         def on_done(resp):
@@ -556,7 +556,7 @@ class ReviewBotApp:
             if 'error' in resp:
                 self.reg_status.config(text=resp['error'], fg=COLORS['error'])
                 return
-            messagebox.showinfo("Thanh cong", "Dang ky thanh cong! Hay dang nhap.")
+            messagebox.showinfo("Thành công", "Đăng ký thành công! Hãy đăng nhập.")
             self._show_login_screen()
             self.login_user.insert(0, username)
             self.login_pass.focus_set()
@@ -570,36 +570,36 @@ class ReviewBotApp:
     def _show_forgot_password_screen(self):
         self._clear_window()
 
-        _container, form = self._build_auth_shell("Quen mat khau")
+        _container, form = self._build_auth_shell("Quên mật khẩu")
 
-        tk.Label(form, text="Nhap username hoac email da dang ky de nhan ma OTP qua email.",
+        tk.Label(form, text="Nhập username hoặc email đã đăng ký để nhận mã OTP qua email.",
                  font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg2'],
                  wraplength=300, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 14))
 
-        self.forgot_identifier = self._labeled_entry(form, "Username hoac Email")
+        self.forgot_identifier = self._labeled_entry(form, "Username hoặc Email")
 
         self.forgot_status = tk.Label(form, text="", font=self.fonts['small'], fg=COLORS['error'],
                                        bg=COLORS['bg2'], wraplength=340, justify=tk.LEFT)
         self.forgot_status.pack(pady=(0, 8))
 
-        self.forgot_send_btn = make_button(form, text="GUI MA OTP", command=self._do_forgot_request,
+        self.forgot_send_btn = make_button(form, text="GỬI MÃ OTP", command=self._do_forgot_request,
                                           bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
                                           width=30, pady=8)
         self.forgot_send_btn.pack(pady=(4, 0))
 
-        # Buoc 2: chi hien sau khi gui OTP thanh cong
+        # Bước 2: chỉ hiện sau khi gửi OTP thành công
         self.forgot_step2_frame = tk.Frame(form, bg=COLORS['bg2'])
 
-        self.forgot_otp = self._labeled_entry(self.forgot_step2_frame, "Ma OTP (6 so, gui qua email)")
-        self.forgot_new_pass = self._labeled_entry(self.forgot_step2_frame, "Mat khau moi", show='*')
+        self.forgot_otp = self._labeled_entry(self.forgot_step2_frame, "Mã OTP (6 số, gửi qua email)")
+        self.forgot_new_pass = self._labeled_entry(self.forgot_step2_frame, "Mật khẩu mới", show='*')
 
-        self.forgot_reset_btn = make_button(self.forgot_step2_frame, text="DAT LAI MAT KHAU",
+        self.forgot_reset_btn = make_button(self.forgot_step2_frame, text="ĐẶT LẠI MẬT KHẨU",
                                            command=self._do_reset_password,
                                            bg=COLORS['success'], fg='#000', font=self.fonts['btn'],
                                            width=30, pady=8)
         self.forgot_reset_btn.pack(pady=(4, 0))
 
-        self.forgot_back_link = tk.Label(form, text="< Quay lai dang nhap", font=self.fonts['tiny'],
+        self.forgot_back_link = tk.Label(form, text="← Quay lại đăng nhập", font=self.fonts['tiny'],
                               fg=COLORS['dim'], bg=COLORS['bg2'], cursor="hand2")
         self.forgot_back_link.pack(pady=(16, 0))
         self.forgot_back_link.bind('<Button-1>', lambda e: self._show_login_screen())
@@ -609,11 +609,11 @@ class ReviewBotApp:
     def _do_forgot_request(self):
         identifier = self.forgot_identifier.get().strip()
         if not identifier:
-            self.forgot_status.config(text="Nhap username hoac email!", fg=COLORS['error'])
+            self.forgot_status.config(text="Nhập username hoặc email!", fg=COLORS['error'])
             return
 
         self.server_url = SERVER_URL
-        self.forgot_status.config(text="Dang gui ma OTP...", fg=COLORS['warning'])
+        self.forgot_status.config(text="Đang gửi mã OTP...", fg=COLORS['warning'])
         self.forgot_send_btn.config(state=tk.DISABLED)
 
         def on_done(resp):
@@ -623,7 +623,7 @@ class ReviewBotApp:
             if 'error' in resp:
                 self.forgot_status.config(text=resp['error'], fg=COLORS['error'])
                 return
-            self.forgot_status.config(text=resp.get('message', 'Da gui ma OTP, kiem tra email!'),
+            self.forgot_status.config(text=resp.get('message', 'Đã gửi mã OTP, kiểm tra email!'),
                                        fg=COLORS['success'])
             self.forgot_step2_frame.pack(fill=tk.X, before=self.forgot_back_link)
             self.forgot_otp.focus_set()
@@ -637,13 +637,13 @@ class ReviewBotApp:
         new_password = self.forgot_new_pass.get()
 
         if not otp or not new_password:
-            self.forgot_status.config(text="Nhap day du ma OTP va mat khau moi!", fg=COLORS['error'])
+            self.forgot_status.config(text="Nhập đầy đủ mã OTP và mật khẩu mới!", fg=COLORS['error'])
             return
         if len(new_password) < 6:
-            self.forgot_status.config(text="Mat khau moi toi thieu 6 ky tu!", fg=COLORS['error'])
+            self.forgot_status.config(text="Mật khẩu mới tối thiểu 6 ký tự!", fg=COLORS['error'])
             return
 
-        self.forgot_status.config(text="Dang dat lai mat khau...", fg=COLORS['warning'])
+        self.forgot_status.config(text="Đang đặt lại mật khẩu...", fg=COLORS['warning'])
         self.forgot_reset_btn.config(state=tk.DISABLED)
 
         def on_done(resp):
@@ -653,7 +653,7 @@ class ReviewBotApp:
             if 'error' in resp:
                 self.forgot_status.config(text=resp['error'], fg=COLORS['error'])
                 return
-            messagebox.showinfo("Thanh cong", resp.get('message', 'Da dat lai mat khau!'))
+            messagebox.showinfo("Thành công", resp.get('message', 'Đã đặt lại mật khẩu!'))
             self._show_login_screen()
             self.login_user.insert(0, identifier)
             self.login_pass.focus_set()
@@ -693,12 +693,12 @@ class ReviewBotApp:
         self.sidebar_btns = {}
         self.sidebar_accents = {}
         menu_items = [
-            ('home', '🏠  Danh gia'),
-            ('google_accounts', '📧  Tai khoan GG'),
-            ('history', '📋  Lich su'),
-            ('deposit', '💰  Nap xu'),
-            ('account', '👤  Tai khoan'),
-            ('stats', '📊  Thong ke'),
+            ('home', '🏠  Đánh giá'),
+            ('google_accounts', '📧  Tài khoản GG'),
+            ('history', '📋  Lịch sử'),
+            ('deposit', '💰  Nạp xu'),
+            ('account', '👤  Tài khoản'),
+            ('stats', '📊  Thống kê'),
         ]
 
         for key, label in menu_items:
@@ -738,7 +738,7 @@ class ReviewBotApp:
 
         bottom = tk.Frame(sidebar, bg=COLORS['sidebar'])
         bottom.pack(side=tk.BOTTOM, fill=tk.X, padx=16, pady=14)
-        logout_lbl = tk.Label(bottom, text="⏻  Dang xuat", font=self.fonts['tiny'],
+        logout_lbl = tk.Label(bottom, text="⏻  Đăng xuất", font=self.fonts['tiny'],
                  fg=COLORS['error'], bg=COLORS['sidebar'], cursor="hand2")
         logout_lbl.pack(anchor=tk.W)
         logout_lbl.bind('<Button-1>', lambda e: self._logout())
@@ -751,11 +751,24 @@ class ReviewBotApp:
         support_inner = tk.Frame(support_card, bg=COLORS['bg2'], padx=10, pady=8)
         support_inner.pack(fill=tk.X)
 
-        tk.Label(support_inner, text="Ho tro", font=self.fonts['tiny'], fg=COLORS['dim'],
+        tk.Label(support_inner, text="Hỗ trợ", font=self.fonts['tiny'], fg=COLORS['dim'],
                  bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(0, 4))
 
         self._make_support_link(support_inner, "💬 Zalo: 0828118789", "https://zalo.me/0828118789")
         self._make_support_link(support_inner, "✈️ TG: @Trongsuport", "https://t.me/Trongsuport")
+
+        intro_card = tk.Frame(sidebar, bg=COLORS['bg2'], highlightbackground=COLORS['border'],
+                               highlightthickness=1)
+        intro_card.pack(side=tk.BOTTOM, fill=tk.X, padx=12, pady=(10, 0))
+        intro_inner = tk.Frame(intro_card, bg=COLORS['bg2'], padx=10, pady=8)
+        intro_inner.pack(fill=tk.X)
+
+        tk.Label(intro_inner, text="🏢 DJ Media", font=self.fonts['tiny'], fg=COLORS['dim'],
+                 bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(0, 4))
+        tk.Label(intro_inner,
+                 text="DVFB • Marketing • Đào tạo\nWebsite • Tools Auto",
+                 font=self.fonts['tiny'], fg=COLORS['fg'], bg=COLORS['bg2'],
+                 wraplength=175, justify=tk.LEFT, anchor=tk.W).pack(fill=tk.X)
 
         self.main_area = tk.Frame(self.root, bg=COLORS['bg'])
         self.main_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -777,7 +790,7 @@ class ReviewBotApp:
         logged_in = sum(1 for v in self.google_accounts_status.values() if v)
         xu = (self.user_info or {}).get('xu', 0)
         self.sidebar_stats.config(
-            text=f"Xu: {xu:,} \U0001FA99\nGG accounts: {acc_count} ({logged_in} active)\nDa danh gia: {self.review_count}")
+            text=f"Xu: {xu:,} \U0001FA99\nGG accounts: {acc_count} ({logged_in} active)\nĐã đánh giá: {self.review_count}")
 
     def _navigate(self, page):
         self.current_page = page
@@ -809,7 +822,7 @@ class ReviewBotApp:
             self._build_stats_page()
 
     def _logout(self):
-        if messagebox.askyesno("Xac nhan", "Dang xuat?"):
+        if messagebox.askyesno("Xác nhận", "Đăng xuất?"):
             self.token = None
             self.user_info = None
             self._save_config()
@@ -821,10 +834,10 @@ class ReviewBotApp:
         page = tk.Frame(self.main_area, bg=COLORS['bg'])
         page.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
 
-        tk.Label(page, text="Chay danh gia", font=self.fonts['title'],
+        tk.Label(page, text="Chạy đánh giá", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W)
-        tk.Label(page, text=f"Da danh gia: {self.review_count} | Tai khoan GG: {len(self.google_accounts)} | "
-                             f"Chi phi: {REVIEW_COST_XU_DEFAULT} xu/danh gia",
+        tk.Label(page, text=f"Đã đánh giá: {self.review_count} | Tài khoản GG: {len(self.google_accounts)} | "
+                             f"Chi phí: {REVIEW_COST_XU_DEFAULT} xu/đánh giá",
                  font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(2, 12))
 
         sec1 = tk.Frame(page, bg=COLORS['bg2'], highlightbackground=COLORS['border'], highlightthickness=1)
@@ -852,7 +865,7 @@ class ReviewBotApp:
         NumberStepper(row_opt, self.chrome_count, from_=1, to=10,
                       bg=COLORS['bg2']).pack(side=tk.LEFT, padx=4)
 
-        tk.Label(row_opt, text="  So luong:", font=self.fonts['small'],
+        tk.Label(row_opt, text="  Số lượng:", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg2']).pack(side=tk.LEFT, padx=(12, 0))
         self.target_count = tk.IntVar(value=5)
         NumberStepper(row_opt, self.target_count, from_=1, to=500, width=4,
@@ -865,10 +878,10 @@ class ReviewBotApp:
 
         acc_header = tk.Frame(inner_acc, bg=COLORS['bg2'])
         acc_header.pack(fill=tk.X)
-        tk.Label(acc_header, text="Tai khoan Google:", font=self.fonts['small'],
+        tk.Label(acc_header, text="Tài khoản Google:", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg2'], anchor=tk.W).pack(side=tk.LEFT)
 
-        count_text = f"({len(self.google_accounts)} tai khoan)"
+        count_text = f"({len(self.google_accounts)} tài khoản)"
         self.acc_count_label = tk.Label(acc_header, text=count_text, font=self.fonts['small'],
                                          fg=COLORS['accent'], bg=COLORS['bg2'])
         self.acc_count_label.pack(side=tk.LEFT, padx=(6, 0))
@@ -890,7 +903,7 @@ class ReviewBotApp:
                                    relief=tk.FLAT, width=18, show='*')
         self.quick_pass.pack(side=tk.LEFT, padx=(4, 8), ipady=3)
 
-        make_button(add_acc_row, text="+ Them", command=self._quick_add_account,
+        make_button(add_acc_row, text="+ Thêm", command=self._quick_add_account,
                   bg=COLORS['accent'], fg='#000', font=self.fonts['tiny'],
                   relief=tk.FLAT, cursor="hand2").pack(side=tk.LEFT, padx=(0, 4))
 
@@ -903,13 +916,13 @@ class ReviewBotApp:
         inner2 = tk.Frame(sec2, bg=COLORS['bg2'], padx=14, pady=10)
         inner2.pack(fill=tk.X)
 
-        tk.Label(inner2, text="Noi dung binh luan (moi dong = 1 danh gia):", font=self.fonts['small'],
+        tk.Label(inner2, text="Nội dung bình luận (mỗi dòng = 1 đánh giá):", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X)
         self.comment_text = ScrollText(inner2, height=4, bg=COLORS['bg3'], fg=COLORS['fg'],
                                         font=self.fonts['body'], outer_bg=COLORS['bg2'])
         self.comment_text.pack(fill=tk.X, pady=(2, 4))
 
-        self.comment_hint = tk.Label(inner2, text="0 dong", font=self.fonts['tiny'],
+        self.comment_hint = tk.Label(inner2, text="0 dòng", font=self.fonts['tiny'],
                                      fg=COLORS['dim'], bg=COLORS['bg2'])
         self.comment_hint.pack(anchor=tk.W)
         self.comment_text.bind('<KeyRelease>', self._update_comment_hint)
@@ -917,12 +930,12 @@ class ReviewBotApp:
         btn_row = tk.Frame(page, bg=COLORS['bg'])
         btn_row.pack(fill=tk.X, pady=(0, 10))
 
-        self.btn_start = make_button(btn_row, text=">> BAT DAU DANH GIA <<",
+        self.btn_start = make_button(btn_row, text=">> BẮT ĐẦU ĐÁNH GIÁ <<",
                                     command=self._start_review, bg=COLORS['success'], fg='#000',
                                     font=self.fonts['btn'], relief=tk.FLAT, padx=20, pady=6, cursor="hand2")
         self.btn_start.pack(side=tk.LEFT, padx=(0, 8))
 
-        self.btn_stop = make_button(btn_row, text="DUNG", command=self._stop_review,
+        self.btn_stop = make_button(btn_row, text="DỪNG", command=self._stop_review,
                                    bg=COLORS['error'], fg='white', font=self.fonts['btn'],
                                    relief=tk.FLAT, padx=16, pady=6, cursor="hand2", state=tk.DISABLED)
         self.btn_stop.pack(side=tk.LEFT, padx=(0, 8))
@@ -930,15 +943,15 @@ class ReviewBotApp:
         save_btn_row = tk.Frame(page, bg=COLORS['bg'])
         save_btn_row.pack(fill=tk.X, pady=(0, 8))
 
-        make_button(save_btn_row, text="💾  Luu cau hinh", command=self._save_home_config,
+        make_button(save_btn_row, text="💾  Lưu cấu hình", command=self._save_home_config,
                   bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['small'],
                   relief=tk.FLAT, padx=12, pady=4, cursor="hand2").pack(side=tk.LEFT, padx=(0, 8))
 
-        make_button(save_btn_row, text="📂  Tai cau hinh", command=self._load_home_config,
+        make_button(save_btn_row, text="📂  Tải cấu hình", command=self._load_home_config,
                   bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['small'],
                   relief=tk.FLAT, padx=12, pady=4, cursor="hand2").pack(side=tk.LEFT, padx=(0, 8))
 
-        make_button(btn_row, text="Xoa Chrome", command=self._kill_chrome,
+        make_button(btn_row, text="Xóa Chrome", command=self._kill_chrome,
                   bg=COLORS['warning'], fg='#000', font=self.fonts['small'],
                   relief=tk.FLAT, padx=8, pady=6, cursor="hand2").pack(side=tk.RIGHT)
 
@@ -952,14 +965,14 @@ class ReviewBotApp:
         self.log_text = ScrollText(log_inner, bg=COLORS['log_bg'], fg=COLORS['log_fg'],
                                     font=self.fonts['log'], outer_bg=COLORS['bg2'])
         self.log_text.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
-        self._log("San sang! Nhap thong tin va bat dau danh gia.")
+        self._log("Sẵn sàng! Nhập thông tin và bắt đầu đánh giá.")
 
     def _refresh_home_account_list(self):
         for w in self.account_list_frame.winfo_children():
             w.destroy()
 
         if not self.google_accounts:
-            tk.Label(self.account_list_frame, text="Chua co tai khoan nao. Them o tren hoac vao trang 'Tai khoan GG'.",
+            tk.Label(self.account_list_frame, text="Chưa có tài khoản nào. Thêm ở trên hoặc vào trang 'Tài khoản GG'.",
                      font=self.fonts['tiny'], fg=COLORS['dim'], bg=COLORS['bg2']).pack(anchor=tk.W)
             return
 
@@ -978,24 +991,24 @@ class ReviewBotApp:
             tk.Label(row, text=logged_in, font=self.fonts['tiny'], fg=color,
                      bg=COLORS['bg3']).pack(side=tk.LEFT, padx=(0, 8))
 
-            del_btn = tk.Label(row, text="[Xoa]", font=self.fonts['tiny'], fg=COLORS['error'],
+            del_btn = tk.Label(row, text="[Xóa]", font=self.fonts['tiny'], fg=COLORS['error'],
                                bg=COLORS['bg3'], cursor="hand2")
             del_btn.pack(side=tk.RIGHT)
             del_btn.bind('<Button-1>', lambda e, idx=i: self._remove_account(idx))
 
         if self.acc_count_label:
-            self.acc_count_label.config(text=f"({len(self.google_accounts)} tai khoan)")
+            self.acc_count_label.config(text=f"({len(self.google_accounts)} tài khoản)")
 
     def _quick_add_account(self):
         email = self.quick_email.get().strip()
         password = self.quick_pass.get().strip()
         if not email or not password:
-            messagebox.showwarning("Canh bao", "Nhap day du email va mat khau!")
+            messagebox.showwarning("Cảnh báo", "Nhập đầy đủ email và mật khẩu!")
             return
 
         for acc in self.google_accounts:
             if acc.get('email', '').lower() == email.lower():
-                messagebox.showwarning("Canh bao", "Tai khoan nay da ton tai!")
+                messagebox.showwarning("Cảnh báo", "Tài khoản này đã tồn tại!")
                 return
 
         self.google_accounts.append({'email': email, 'password': password})
@@ -1004,17 +1017,17 @@ class ReviewBotApp:
         self._refresh_home_account_list()
         self.quick_email.delete(0, tk.END)
         self.quick_pass.delete(0, tk.END)
-        self._log(f"Da them tai khoan: {email}")
+        self._log(f"Đã thêm tài khoản: {email}")
 
     def _remove_account(self, index):
         if 0 <= index < len(self.google_accounts):
             email = self.google_accounts[index].get('email', '')
-            if messagebox.askyesno("Xac nhan", f"Xoa tai khoan {email}?"):
+            if messagebox.askyesno("Xác nhận", f"Xóa tài khoản {email}?"):
                 self.google_accounts.pop(index)
                 self.google_accounts_status.pop(email, None)
                 self._save_config()
                 self._refresh_home_account_list()
-                self._log(f"Da xoa tai khoan: {email}")
+                self._log(f"Đã xóa tài khoản: {email}")
 
     def _save_home_config(self):
         try:
@@ -1030,11 +1043,11 @@ class ReviewBotApp:
             }
             with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            self._log("Da luu cau hinh!")
-            messagebox.showinfo("Thanh cong", "Da luu cau hinh!")
+            self._log("Đã lưu cấu hình!")
+            messagebox.showinfo("Thành công", "Đã lưu cấu hình!")
         except Exception as e:
-            self._log(f"Loi luu cau hinh: {e}", True)
-            messagebox.showerror("Loi", f"Khong the luu: {e}")
+            self._log(f"Lỗi lưu cấu hình: {e}", True)
+            messagebox.showerror("Lỗi", f"Không thể lưu: {e}")
 
     def _load_home_config(self):
         try:
@@ -1059,18 +1072,18 @@ class ReviewBotApp:
                     self.comment_text.insert('1.0', cfg.get('last_comments', ''))
 
                 self._refresh_home_account_list()
-                self._log("Da tai cau hinh!")
-                messagebox.showinfo("Thanh cong", "Da tai cau hinh!")
+                self._log("Đã tải cấu hình!")
+                messagebox.showinfo("Thành công", "Đã tải cấu hình!")
             else:
-                messagebox.showwarning("Canh bao", "Khong tim thay file cau hinh!")
+                messagebox.showwarning("Cảnh báo", "Không tìm thấy file cấu hình!")
         except Exception as e:
-            self._log(f"Loi tai cau hinh: {e}", True)
-            messagebox.showerror("Loi", f"Khong the tai: {e}")
+            self._log(f"Lỗi tải cấu hình: {e}", True)
+            messagebox.showerror("Lỗi", f"Không thể tải: {e}")
 
     def _update_comment_hint(self, event=None):
         raw = self.comment_text.get('1.0', tk.END).strip()
         lines = [l for l in raw.split('\n') if l.strip()] if raw else []
-        self.comment_hint.config(text=f"{len(lines)} noi dung | Moi tai khoan lay 1 noi dung ngau nhien")
+        self.comment_hint.config(text=f"{len(lines)} nội dung | Mỗi tài khoản lấy 1 nội dung ngẫu nhiên")
 
     def _log(self, msg, is_error=False):
         def _do():
@@ -1088,24 +1101,24 @@ class ReviewBotApp:
         stars = self.star_var.get()
 
         if not url:
-            messagebox.showerror("Loi", "Nhap Link Google Maps!")
+            messagebox.showerror("Lỗi", "Nhập Link Google Maps!")
             return
         if not comment_lines:
-            messagebox.showerror("Loi", "Nhap it nhat 1 noi dung binh luan!")
+            messagebox.showerror("Lỗi", "Nhập ít nhất 1 nội dung bình luận!")
             return
         for i, line in enumerate(comment_lines):
             if len(line) < 5:
-                messagebox.showerror("Loi", f"Dong {i+1} qua ngan:\n{line}")
+                messagebox.showerror("Lỗi", f"Dòng {i+1} quá ngắn:\n{line}")
                 return
 
         if not self.google_accounts:
-            messagebox.showerror("Loi", "Nhap it nhat 1 tai khoan Google!\nVao trang 'Tai khoan GG' de them.")
+            messagebox.showerror("Lỗi", "Nhập ít nhất 1 tài khoản Google!\nVào trang 'Tài khoản GG' để thêm.")
             return
 
         actual = min(target, len(self.google_accounts))
         actual_chrome = min(chrome_count, actual)
         if actual <= 0:
-            messagebox.showerror("Loi", "Khong du tai khoan de danh gia!")
+            messagebox.showerror("Lỗi", "Không đủ tài khoản để đánh giá!")
             return
 
         self.btn_start.config(state=tk.DISABLED)
@@ -1113,15 +1126,15 @@ class ReviewBotApp:
         def on_profile(resp):
             self.btn_start.config(state=tk.NORMAL)
             if 'error' in resp:
-                messagebox.showerror("Loi", f"Khong kiem tra duoc so xu: {resp['error']}")
+                messagebox.showerror("Lỗi", f"Không kiểm tra được số xu: {resp['error']}")
                 return
 
             xu = resp.get('xu', 0)
             cost = resp.get('review_cost_xu', REVIEW_COST_XU_DEFAULT)
             if xu < cost:
                 self._prompt_topup(
-                    f"Ban dang co {xu} xu, can toi thieu {cost} xu de chay 1 danh gia.\n\n"
-                    f"Nap them xu ngay bay gio?")
+                    f"Bạn đang có {xu} xu, cần tối thiểu {cost} xu để chạy 1 đánh giá.\n\n"
+                    f"Nạp thêm xu ngay bây giờ?")
                 return
 
             self._confirm_and_start_review(url, comment_lines, stars, target, chrome_count,
@@ -1130,23 +1143,23 @@ class ReviewBotApp:
         self._async_api_call('/api/tool/profile', 'GET', on_done=on_profile)
 
     def _prompt_topup(self, message):
-        if messagebox.askyesno("Khong du xu", message):
+        if messagebox.askyesno("Không đủ xu", message):
             self._navigate('deposit')
 
     def _confirm_and_start_review(self, url, comment_lines, stars, target, chrome_count,
                                    actual, actual_chrome, cost):
-        if not messagebox.askyesno("Xac nhan",
-                f"Muc tieu: {target} danh gia\n"
-                f"Tai khoan: {len(self.google_accounts)}\n"
-                f"Se chay: {actual} danh gia\n"
-                f"Chrome cung luc: {actual_chrome}\n"
-                f"Chi phi: {cost} xu/danh gia (toi da {actual * cost} xu)\n\n"
-                f"Bat dau?"):
+        if not messagebox.askyesno("Xác nhận",
+                f"Mục tiêu: {target} đánh giá\n"
+                f"Tài khoản: {len(self.google_accounts)}\n"
+                f"Sẽ chạy: {actual} đánh giá\n"
+                f"Chrome cùng lúc: {actual_chrome}\n"
+                f"Chi phí: {cost} xu/đánh giá (tối đa {actual * cost} xu)\n\n"
+                f"Bắt đầu?"):
             return
 
         self.log_text.delete('1.0', tk.END)
-        self._log(f"BAT DAU: muc tieu {target} | {len(self.google_accounts)} tai khoan")
-        self._log(f"Se chay {actual} danh gia | {actual_chrome} Chrome song song | {cost} xu/danh gia")
+        self._log(f"BẮT ĐẦU: mục tiêu {target} | {len(self.google_accounts)} tài khoản")
+        self._log(f"Sẽ chạy {actual} đánh giá | {actual_chrome} Chrome song song | {cost} xu/đánh giá")
         self._stop_event.clear()
         self._out_of_xu = False
         self.btn_start.config(state=tk.DISABLED)
@@ -1199,17 +1212,17 @@ class ReviewBotApp:
                     self._log(f"\n--- [{total_done+1}/{actual}] Chrome-{worker_id} ---")
                     self._log(f"  TK: {email}")
                     if already_logged:
-                        self._log(f"  [Session cu]")
+                        self._log(f"  [Session cũ]")
                     else:
-                        self._log(f"  [Dang nhap moi]")
-                    self._log(f"  Noi dung: {comment[:60]}...")
+                        self._log(f"  [Đăng nhập mới]")
+                    self._log(f"  Nội dung: {comment[:60]}...")
 
                 charge_resp = api_call('/api/tool/review-charge', 'POST',
                                        token=self.token, server_url=self.server_url)
                 if 'error' in charge_resp:
                     with lock:
-                        self._log(f"  Khong du xu! Con {charge_resp.get('xu', 0)} xu "
-                                   f"(can {charge_resp.get('cost', REVIEW_COST_XU_DEFAULT)} xu/danh gia). Dung lai.", True)
+                        self._log(f"  Không đủ xu! Con {charge_resp.get('xu', 0)} xu "
+                                   f"(cần {charge_resp.get('cost', REVIEW_COST_XU_DEFAULT)} xu/đánh giá). Dừng lại.", True)
                         session_failed += 1
                         self._out_of_xu = True
                     work_queue.task_done()
@@ -1227,25 +1240,25 @@ class ReviewBotApp:
                     self.bots.append(bot)
 
                     if not bot.start_browser():
-                        self._log("Loi Chrome! Bo qua.", True)
+                        self._log("Lỗi Chrome! Bỏ qua.", True)
                         with lock:
                             session_failed += 1
                         continue
 
                     if not already_logged:
                         if not bot.login_google(email, password):
-                            self._log("Loi dang nhap! Bo qua.", True)
+                            self._log("Lỗi đăng nhập! Bỏ qua.", True)
                             with lock:
                                 session_failed += 1
                             continue
                         self.google_accounts_status[email] = True
                         self._save_config()
                     else:
-                        self._log(f"  Kiem tra session...")
+                        self._log(f"  Kiểm tra session...")
                         if not bot.login_google(email, password):
-                            self._log(f"  Session het han, dang nhap lai...")
+                            self._log(f"  Session hết hạn, đăng nhập lại...")
                             if not bot.login_google(email, password):
-                                self._log("Loi dang nhap!", True)
+                                self._log("Lỗi đăng nhập!", True)
                                 self.google_accounts_status[email] = False
                                 with lock:
                                     session_failed += 1
@@ -1253,30 +1266,30 @@ class ReviewBotApp:
                             self.google_accounts_status[email] = True
                             self._save_config()
                         else:
-                            self._log(f"  Session hop le!")
+                            self._log(f"  Session hợp lệ!")
 
                     if not bot.navigate_to_place(url):
-                        self._log("Loi dia diem! Bo qua.", True)
+                        self._log("Lỗi địa điểm! Bỏ qua.", True)
                         with lock:
                             session_failed += 1
                         continue
                     if not bot.click_write_review_button():
-                        self._log("Loi nut review! Bo qua.", True)
+                        self._log("Lỗi nút review! Bỏ qua.", True)
                         with lock:
                             session_failed += 1
                         continue
                     if not bot.select_star_rating(stars):
-                        self._log("Loi chon sao! Bo qua.", True)
+                        self._log("Lỗi chọn sao! Bỏ qua.", True)
                         with lock:
                             session_failed += 1
                         continue
                     if not bot.write_comment(comment):
-                        self._log("Loi viet binh luan! Bo qua.", True)
+                        self._log("Lỗi viết bình luận! Bỏ qua.", True)
                         with lock:
                             session_failed += 1
                         continue
                     if not bot.submit_review():
-                        self._log("Loi gui danh gia! Bo qua.", True)
+                        self._log("Lỗi gửi đánh giá! Bỏ qua.", True)
                         with lock:
                             session_failed += 1
                         continue
@@ -1290,10 +1303,10 @@ class ReviewBotApp:
                              {'place_url': url, 'comment': comment, 'stars': stars},
                              token=self.token, server_url=self.server_url)
                     with lock:
-                        self._log(f"  THANH CONG! [{session_reviewed}/{actual}] | Tool: {self.review_count}")
+                        self._log(f"  THÀNH CÔNG! [{session_reviewed}/{actual}] | Tool: {self.review_count}")
 
                 except Exception as e:
-                    self._log(f"  Loi: {e}", True)
+                    self._log(f"  Lỗi: {e}", True)
                     with lock:
                         session_failed += 1
                 finally:
@@ -1319,12 +1332,12 @@ class ReviewBotApp:
 
         self._log("\n" + "=" * 40)
         if session_reviewed >= target:
-            self._log(f"DAT MUC TIEU! {session_reviewed}/{target}")
+            self._log(f"ĐẠT MỤC TIÊU! {session_reviewed}/{target}")
         elif session_reviewed + session_failed >= actual:
-            self._log(f"HET TAI KHOAN! {session_reviewed} thanh cong, {session_failed} that bai / {target}")
+            self._log(f"HẾT TÀI KHOẢN! {session_reviewed} thành công, {session_failed} thất bại / {target}")
         else:
-            self._log(f"DUNG! {session_reviewed}/{target}")
-        self._log(f"Tong tool: {self.review_count} danh gia")
+            self._log(f"DỪNG! {session_reviewed}/{target}")
+        self._log(f"Tổng tool: {self.review_count} đánh giá")
 
         self._is_reviewing = False
         self.root.after(0, lambda: self.btn_start.config(state=tk.NORMAL))
@@ -1332,11 +1345,11 @@ class ReviewBotApp:
 
         if self._out_of_xu:
             self.root.after(0, lambda: self._prompt_topup(
-                "Ban da het xu giua chung nen mot so danh gia bi bo qua.\n\n"
-                "Nap them xu ngay bay gio?"))
+                "Bạn đã hết xu giữa chừng nên một số đánh giá bị bỏ qua.\n\n"
+                "Nạp thêm xu ngay bây giờ?"))
 
     def _stop_review(self):
-        if messagebox.askyesno("Xac nhan", "Dung tat ca?"):
+        if messagebox.askyesno("Xác nhận", "Dừng tất cả?"):
             self._stop_event.set()
             for bot in self.bots:
                 try:
@@ -1345,7 +1358,7 @@ class ReviewBotApp:
                     pass
             self.bots = []
             self._kill_chrome()
-            self._log("Da dung!")
+            self._log("Đã dừng!")
             self.btn_start.config(state=tk.NORMAL)
             self.btn_stop.config(state=tk.DISABLED)
 
@@ -1360,9 +1373,9 @@ class ReviewBotApp:
 
         header_row = tk.Frame(page, bg=COLORS['bg'])
         header_row.pack(fill=tk.X, pady=(0, 12))
-        tk.Label(header_row, text="Quan ly tai khoan Google", font=self.fonts['title'],
+        tk.Label(header_row, text="Quản lý tài khoản Google", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(side=tk.LEFT)
-        make_button(header_row, text="🔄  Kiem tra lai session", command=self._refresh_all_sessions,
+        make_button(header_row, text="🔄  Kiểm tra lại session", command=self._refresh_all_sessions,
                   bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['small'],
                   relief=tk.FLAT, padx=10, pady=4, cursor="hand2").pack(side=tk.RIGHT)
 
@@ -1371,7 +1384,7 @@ class ReviewBotApp:
         add_inner = tk.Frame(add_frame, bg=COLORS['bg2'], padx=14, pady=12)
         add_inner.pack(fill=tk.X)
 
-        tk.Label(add_inner, text="Them tai khoan moi", font=self.fonts['heading'],
+        tk.Label(add_inner, text="Thêm tài khoản mới", font=self.fonts['heading'],
                  fg=COLORS['accent'], bg=COLORS['bg2']).pack(anchor=tk.W, pady=(0, 8))
 
         row1 = tk.Frame(add_inner, bg=COLORS['bg2'])
@@ -1384,7 +1397,7 @@ class ReviewBotApp:
                                  relief=tk.FLAT, width=30)
         self.ga_email.pack(side=tk.LEFT, padx=(0, 16), ipady=4)
 
-        tk.Label(row1, text="Mat khau:", font=self.fonts['small'], fg=COLORS['dim'],
+        tk.Label(row1, text="Mật khẩu:", font=self.fonts['small'], fg=COLORS['dim'],
                  bg=COLORS['bg2'], width=10, anchor=tk.W).pack(side=tk.LEFT)
         self.ga_pass = tk.Entry(row1, bg=COLORS['bg3'], fg=COLORS['fg'],
                                 insertbackground=COLORS['fg'], font=self.fonts['body'],
@@ -1394,11 +1407,11 @@ class ReviewBotApp:
         row1b = tk.Frame(add_inner, bg=COLORS['bg2'])
         row1b.pack(fill=tk.X, pady=(8, 6))
 
-        make_button(row1b, text="Them tai khoan", command=self._add_google_account,
+        make_button(row1b, text="Thêm tài khoản", command=self._add_google_account,
                   bg=COLORS['accent'], fg='#000', font=self.fonts['btn'],
                   relief=tk.FLAT, cursor="hand2").pack(side=tk.LEFT, padx=(0, 8))
 
-        make_button(row1b, text="Them nhieu (file)", command=self._import_accounts_file,
+        make_button(row1b, text="Thêm nhiều (file)", command=self._import_accounts_file,
                   bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['small'],
                   relief=tk.FLAT, padx=8, cursor="hand2").pack(side=tk.LEFT)
 
@@ -1411,7 +1424,7 @@ class ReviewBotApp:
         list_inner = tk.Frame(list_frame, bg=COLORS['bg2'], padx=14, pady=10)
         list_inner.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(list_inner, text=f"Danh sach tai khoan ({len(self.google_accounts)})", font=self.fonts['heading'],
+        tk.Label(list_inner, text=f"Danh sách tài khoản ({len(self.google_accounts)})", font=self.fonts['heading'],
                  fg=COLORS['accent'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(0, 8))
 
         cols_frame = tk.Frame(list_inner, bg=COLORS['bg4'], padx=10, pady=6)
@@ -1420,11 +1433,11 @@ class ReviewBotApp:
                  bg=COLORS['bg4'], width=4, anchor=tk.W).pack(side=tk.LEFT)
         tk.Label(cols_frame, text="Email", font=self.fonts['small'], fg=COLORS['dim'],
                  bg=COLORS['bg4'], width=30, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 8))
-        tk.Label(cols_frame, text="Trang thai", font=self.fonts['small'], fg=COLORS['dim'],
+        tk.Label(cols_frame, text="Trạng thái", font=self.fonts['small'], fg=COLORS['dim'],
                  bg=COLORS['bg4'], width=16, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 8))
         tk.Label(cols_frame, text="Profile", font=self.fonts['small'], fg=COLORS['dim'],
                  bg=COLORS['bg4'], width=20, anchor=tk.W).pack(side=tk.LEFT, padx=(0, 8))
-        tk.Label(cols_frame, text="Thao tac", font=self.fonts['small'], fg=COLORS['dim'],
+        tk.Label(cols_frame, text="Thao tác", font=self.fonts['small'], fg=COLORS['dim'],
                  bg=COLORS['bg4'], width=10, anchor=tk.W).pack(side=tk.LEFT)
 
         self.ga_list_canvas = tk.Canvas(list_inner, bg=COLORS['bg2'], highlightthickness=0)
@@ -1474,12 +1487,12 @@ class ReviewBotApp:
             btn_frame.pack(side=tk.LEFT)
 
             if profile_exists:
-                del_prof = tk.Label(btn_frame, text="[Xoa profile]", font=self.fonts['tiny'],
+                del_prof = tk.Label(btn_frame, text="[Xóa profile]", font=self.fonts['tiny'],
                                     fg=COLORS['warning'], bg=row_bg, cursor="hand2")
                 del_prof.pack(side=tk.LEFT, padx=(0, 6))
                 del_prof.bind('<Button-1>', lambda e, idx=i: self._delete_profile(idx))
 
-            del_acc = tk.Label(btn_frame, text="[Xoa]", font=self.fonts['tiny'],
+            del_acc = tk.Label(btn_frame, text="[Xóa]", font=self.fonts['tiny'],
                                fg=COLORS['error'], bg=row_bg, cursor="hand2")
             del_acc.pack(side=tk.LEFT)
             del_acc.bind('<Button-1>', lambda e, idx=i: self._remove_google_account(idx))
@@ -1488,12 +1501,12 @@ class ReviewBotApp:
         email = self.ga_email.get().strip()
         password = self.ga_pass.get().strip()
         if not email or not password:
-            self.ga_status.config(text="Nhap day du email va mat khau!", fg=COLORS['error'])
+            self.ga_status.config(text="Nhập đầy đủ email và mật khẩu!", fg=COLORS['error'])
             return
 
         for acc in self.google_accounts:
             if acc.get('email', '').lower() == email.lower():
-                self.ga_status.config(text="Tai khoan nay da ton tai!", fg=COLORS['warning'])
+                self.ga_status.config(text="Tài khoản này đã tồn tại!", fg=COLORS['warning'])
                 return
 
         self.google_accounts.append({'email': email, 'password': password})
@@ -1502,48 +1515,48 @@ class ReviewBotApp:
         self._refresh_google_accounts_list()
         self.ga_email.delete(0, tk.END)
         self.ga_pass.delete(0, tk.END)
-        self.ga_status.config(text=f"Da them: {email}", fg=COLORS['success'])
+        self.ga_status.config(text=f"Đã thêm: {email}", fg=COLORS['success'])
 
     def _remove_google_account(self, index):
         if 0 <= index < len(self.google_accounts):
             email = self.google_accounts[index].get('email', '')
-            if messagebox.askyesno("Xac nhan", f"Xoa tai khoan {email}?"):
+            if messagebox.askyesno("Xác nhận", f"Xóa tài khoản {email}?"):
                 self.google_accounts.pop(index)
                 self.google_accounts_status.pop(email, None)
                 self._save_config()
                 self._refresh_google_accounts_list()
-                self.ga_status.config(text=f"Da xoa: {email}", fg=COLORS['success'])
+                self.ga_status.config(text=f"Đã xóa: {email}", fg=COLORS['success'])
 
     def _delete_profile(self, index):
         if 0 <= index < len(self.google_accounts):
             email = self.google_accounts[index].get('email', '')
             profile_name = email_to_profile_name(email)
             profile_path = os.path.join(PROFILES_DIR, profile_name)
-            if messagebox.askyesno("Xac nhan", f"Xoa Chrome profile cua {email}?\nLan tiep se phai dang nhap lai."):
+            if messagebox.askyesno("Xác nhận", f"Xóa Chrome profile của {email}?\nLần tiếp theo sẽ phải đăng nhập lại."):
                 try:
                     import shutil
                     shutil.rmtree(profile_path, ignore_errors=True)
                     self.google_accounts_status[email] = False
                     self._save_config()
                     self._refresh_google_accounts_list()
-                    self.ga_status.config(text=f"Da xoa profile: {email}", fg=COLORS['success'])
+                    self.ga_status.config(text=f"Đã xóa profile: {email}", fg=COLORS['success'])
                 except Exception as e:
-                    self.ga_status.config(text=f"Loi xoa profile: {e}", fg=COLORS['error'])
+                    self.ga_status.config(text=f"Lỗi xóa profile: {e}", fg=COLORS['error'])
 
     def _refresh_all_sessions(self):
-        self.ga_status.config(text="Dang kiem tra...", fg=COLORS['warning'])
+        self.ga_status.config(text="Đang kiểm tra...", fg=COLORS['warning'])
         self.root.update()
         self._check_all_profile_sessions()
         self._save_config()
         self._refresh_google_accounts_list()
         count = sum(1 for v in self.google_accounts_status.values() if v)
-        self.ga_status.config(text=f"Kiem tra xong: {count}/{len(self.google_accounts)} da dang nhap",
+        self.ga_status.config(text=f"Kiểm tra xong: {count}/{len(self.google_accounts)} đã đăng nhập",
                               fg=COLORS['success'])
 
     def _import_accounts_file(self):
         filepath = filedialog.askopenfilename(
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-            title="Chon file danh sach tai khoan"
+            title="Chọn file danh sách tài khoản"
         )
         if not filepath:
             return
@@ -1577,10 +1590,10 @@ class ReviewBotApp:
 
             self._save_config()
             self._refresh_google_accounts_list()
-            self.ga_status.config(text=f"Nhap thanh cong: {added} moi, {skipped} da co",
+            self.ga_status.config(text=f"Nhập thành công: {added} mới, {skipped} đã có",
                                   fg=COLORS['success'])
         except Exception as e:
-            self.ga_status.config(text=f"Loi doc file: {e}", fg=COLORS['error'])
+            self.ga_status.config(text=f"Lỗi đọc file: {e}", fg=COLORS['error'])
 
     # ==================== HISTORY PAGE ====================
 
@@ -1588,7 +1601,7 @@ class ReviewBotApp:
         page = tk.Frame(self.main_area, bg=COLORS['bg'])
         page.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
 
-        tk.Label(page, text="Lich su danh gia", font=self.fonts['title'],
+        tk.Label(page, text="Lịch sử đánh giá", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(0, 12))
 
         resp = api_call('/api/tool/history', 'GET', token=self.token, server_url=self.server_url)
@@ -1604,16 +1617,16 @@ class ReviewBotApp:
         sec_inner = tk.Frame(sec, bg=COLORS['bg2'], padx=10, pady=10)
         sec_inner.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(sec_inner, text=f"Danh gia gan day ({len(reviews)} phan tu)",
+        tk.Label(sec_inner, text=f"Đánh giá gần đây ({len(reviews)} phần tử)",
                  font=self.fonts['heading'],
                  fg=COLORS['accent'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(0, 6))
 
         cols = ("time", "url", "stars", "status")
         tree = ttk.Treeview(sec_inner, columns=cols, show="headings", style="Hist.Treeview", height=12)
-        tree.heading("time", text="Thoi gian")
-        tree.heading("url", text="Dia diem")
+        tree.heading("time", text="Thời gian")
+        tree.heading("url", text="Địa điểm")
         tree.heading("stars", text="Sao")
-        tree.heading("status", text="Trang thai")
+        tree.heading("status", text="Trạng thái")
         tree.column("time", width=140)
         tree.column("url", width=400)
         tree.column("stars", width=60)
@@ -1630,7 +1643,7 @@ class ReviewBotApp:
         tree.pack(fill=tk.BOTH, expand=True)
 
         if not reviews:
-            tk.Label(sec_inner, text="Chua co danh gia nao", font=self.fonts['small'],
+            tk.Label(sec_inner, text="Chưa có đánh giá nào", font=self.fonts['small'],
                      fg=COLORS['dim'], bg=COLORS['bg2']).pack(pady=20)
 
     # ==================== NAP XU PAGE ====================
@@ -1639,12 +1652,12 @@ class ReviewBotApp:
         page = tk.Frame(self.main_area, bg=COLORS['bg'])
         page.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
 
-        tk.Label(page, text="Nap tien -> Xu", font=self.fonts['title'],
+        tk.Label(page, text="Nạp tiền -> Xu", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W)
-        tk.Label(page, text="Ty le: 1.000d = 1 xu. Xu duoc cong tu dong sau khi SePay xac nhan chuyen khoan.",
+        tk.Label(page, text="Tỷ lệ: 1.000đ = 1 xu. Xu được cộng tự động sau khi SePay xác nhận chuyển khoản.",
                  font=self.fonts['small'], fg=COLORS['dim'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(2, 12))
 
-        self.deposit_xu_label = tk.Label(page, text="So xu hien co: ...", font=self.fonts['body'],
+        self.deposit_xu_label = tk.Label(page, text="Số xu hiện có: ...", font=self.fonts['body'],
                                           fg=COLORS['accent'], bg=COLORS['bg'])
         self.deposit_xu_label.pack(anchor=tk.W, pady=(0, 10))
 
@@ -1652,7 +1665,7 @@ class ReviewBotApp:
             if self.current_page != 'deposit' or not self.deposit_xu_label.winfo_exists():
                 return
             if 'error' not in resp:
-                self.deposit_xu_label.config(text=f"So xu hien co: {resp.get('xu', 0):,} \U0001FA99")
+                self.deposit_xu_label.config(text=f"Số xu hiện có: {resp.get('xu', 0):,} \U0001FA99")
                 self.user_info = self.user_info or {}
                 self.user_info['xu'] = resp.get('xu', 0)
                 self._update_sidebar_stats()
@@ -1666,7 +1679,7 @@ class ReviewBotApp:
 
         row = tk.Frame(form_inner, bg=COLORS['bg2'])
         row.pack(fill=tk.X)
-        tk.Label(row, text="So tien (d):", font=self.fonts['small'],
+        tk.Label(row, text="Số tiền (đ):", font=self.fonts['small'],
                  fg=COLORS['dim'], bg=COLORS['bg2']).pack(side=tk.LEFT)
         self.deposit_amount_entry = tk.Entry(row, bg=COLORS['bg3'], fg=COLORS['fg'],
                                               insertbackground=COLORS['fg'], font=self.fonts['body'],
@@ -1674,7 +1687,7 @@ class ReviewBotApp:
         self.deposit_amount_entry.pack(side=tk.LEFT, padx=8, ipady=4)
         self.deposit_amount_entry.insert(0, "50000")
 
-        self.deposit_btn = make_button(row, text="Tao giao dich nap", command=self._start_deposit,
+        self.deposit_btn = make_button(row, text="Tạo giao dịch nạp", command=self._start_deposit,
                                       bg=COLORS['accent'], fg='#000', font=self.fonts['small'],
                                       relief=tk.FLAT, padx=12, pady=4, cursor="hand2")
         self.deposit_btn.pack(side=tk.LEFT, padx=8)
@@ -1691,14 +1704,14 @@ class ReviewBotApp:
         try:
             amount = int(self.deposit_amount_entry.get().strip())
         except ValueError:
-            messagebox.showwarning("Canh bao", "So tien khong hop le!")
+            messagebox.showwarning("Cảnh báo", "Số tiền không hợp lệ!")
             return
         if amount < 10000:
-            messagebox.showwarning("Canh bao", "So tien toi thieu 10.000d!")
+            messagebox.showwarning("Cảnh báo", "Số tiền tối thiểu 10.000đ!")
             return
 
         self.deposit_btn.config(state=tk.DISABLED)
-        self.deposit_status_label.config(text="Dang tao giao dich...", fg=COLORS['warning'])
+        self.deposit_status_label.config(text="Đang tạo giao dịch...", fg=COLORS['warning'])
 
         def on_done(resp):
             if not hasattr(self, 'deposit_btn') or not self.deposit_btn.winfo_exists():
@@ -1707,7 +1720,7 @@ class ReviewBotApp:
             if 'error' in resp:
                 self.deposit_status_label.config(text=resp['error'], fg=COLORS['error'])
                 return
-            self.deposit_status_label.config(text="Da tao giao dich, xem thong tin ben duoi:", fg=COLORS['dim'])
+            self.deposit_status_label.config(text="Đã tạo giao dịch, xem thông tin bên dưới:", fg=COLORS['dim'])
             self._show_deposit_result(resp)
 
         self._async_api_call('/api/tool/deposit/create', 'POST', {'amount': amount}, on_done=on_done)
@@ -1721,7 +1734,7 @@ class ReviewBotApp:
 
         left = tk.Frame(inner, bg=COLORS['bg2'])
         left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 20))
-        self.deposit_qr_label = tk.Label(left, bg=COLORS['bg2'], text="Dang tai QR...",
+        self.deposit_qr_label = tk.Label(left, bg=COLORS['bg2'], text="Đang tải QR...",
                                           fg=COLORS['dim'], font=self.fonts['small'])
         self.deposit_qr_label.pack()
 
@@ -1729,26 +1742,26 @@ class ReviewBotApp:
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         info_lines = [
-            ("Ngan hang", resp.get('bank_code', '-')),
-            ("So tai khoan", resp.get('bank_account', '-')),
-            ("Chu tai khoan", resp.get('account_name', '-')),
-            ("So tien", f"{resp.get('amount', 0):,}d ({resp.get('xu', 0):,} xu)"),
-            ("Noi dung CK", resp.get('code', '-')),
+            ("Ngân hàng", resp.get('bank_code', '-')),
+            ("Số tài khoản", resp.get('bank_account', '-')),
+            ("Chủ tài khoản", resp.get('account_name', '-')),
+            ("Số tiền", f"{resp.get('amount', 0):,}đ ({resp.get('xu', 0):,} xu)"),
+            ("Nội dung CK", resp.get('code', '-')),
         ]
         for label, value in info_lines:
             r = tk.Frame(right, bg=COLORS['bg2'])
             r.pack(fill=tk.X, pady=3)
             tk.Label(r, text=f"{label}:", font=self.fonts['small'], fg=COLORS['dim'],
                      bg=COLORS['bg2'], width=14, anchor=tk.W).pack(side=tk.LEFT)
-            color = COLORS['accent'] if label == "Noi dung CK" else COLORS['fg']
+            color = COLORS['accent'] if label == "Nội dung CK" else COLORS['fg']
             tk.Label(r, text=value, font=self.fonts['body'], fg=color,
                      bg=COLORS['bg2'], anchor=tk.W).pack(side=tk.LEFT)
 
-        tk.Label(right, text="Nhap DUNG noi dung chuyen khoan de he thong tu dong cong xu!",
+        tk.Label(right, text="Nhập ĐÚNG nội dung chuyển khoản để hệ thống tự động cộng xu!",
                  font=self.fonts['tiny'], fg=COLORS['warning'], bg=COLORS['bg2'],
                  wraplength=340, justify=tk.LEFT).pack(anchor=tk.W, pady=(8, 0))
 
-        self.deposit_wait_label = tk.Label(right, text="⏳ Dang cho thanh toan...", font=self.fonts['small'],
+        self.deposit_wait_label = tk.Label(right, text="⏳ Đang chờ thanh toán...", font=self.fonts['small'],
                                             fg=COLORS['warning'], bg=COLORS['bg2'])
         self.deposit_wait_label.pack(anchor=tk.W, pady=(10, 0))
 
@@ -1765,7 +1778,7 @@ class ReviewBotApp:
                     self.root.after(0, lambda: self._set_deposit_qr_error(err))
             threading.Thread(target=fetch_qr, daemon=True).start()
         else:
-            self.deposit_qr_label.config(text="(Server chua cau hinh QR)")
+            self.deposit_qr_label.config(text="(Server chưa cấu hình QR)")
 
         self._poll_deposit_status(resp['tx_id'])
 
@@ -1777,23 +1790,23 @@ class ReviewBotApp:
             self.deposit_qr_label.config(image=photo, text="")
             self.deposit_qr_label.image = photo  # giu reference tranh bi garbage collect
         except Exception as e:
-            self.deposit_qr_label.config(text=f"Loi hien QR: {e}")
+            self.deposit_qr_label.config(text=f"Lỗi hiện QR: {e}")
 
     def _set_deposit_qr_error(self, err):
         if hasattr(self, 'deposit_qr_label') and self.deposit_qr_label.winfo_exists():
-            self.deposit_qr_label.config(text=f"Khong tai duoc QR\n({err})")
+            self.deposit_qr_label.config(text=f"Không tải được QR\n({err})")
 
     def _poll_deposit_status(self, tx_id):
         def on_status(resp):
             if not hasattr(self, 'deposit_wait_label') or not self.deposit_wait_label.winfo_exists():
-                return  # nguoi dung da roi trang, dung polling
+                return  # người dùng đã rời trang, dừng polling
 
             if 'error' in resp:
                 return
 
             if resp.get('status') == 'completed':
                 self.deposit_wait_label.config(
-                    text=f"✅ Da nhan {resp.get('xu_amount', 0):,} xu!", fg=COLORS['success'])
+                    text=f"✅ Đã nhận {resp.get('xu_amount', 0):,} xu!", fg=COLORS['success'])
                 self._async_api_call('/api/tool/profile', 'GET', on_done=self._on_profile_refresh_after_deposit)
                 return
 
@@ -1809,7 +1822,7 @@ class ReviewBotApp:
         self.user_info['xu'] = resp.get('xu', 0)
         self._update_sidebar_stats()
         if hasattr(self, 'deposit_xu_label') and self.deposit_xu_label.winfo_exists():
-            self.deposit_xu_label.config(text=f"So xu hien co: {resp.get('xu', 0):,} \U0001FA99")
+            self.deposit_xu_label.config(text=f"Số xu hiện có: {resp.get('xu', 0):,} \U0001FA99")
 
     # ==================== ACCOUNT PAGE ====================
 
@@ -1817,16 +1830,16 @@ class ReviewBotApp:
         page = tk.Frame(self.main_area, bg=COLORS['bg'])
         page.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
 
-        tk.Label(page, text="Thong tin tai khoan", font=self.fonts['title'],
+        tk.Label(page, text="Thông tin tài khoản", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(0, 16))
 
-        loading = tk.Label(page, text="Dang tai...", font=self.fonts['small'],
+        loading = tk.Label(page, text="Đang tải...", font=self.fonts['small'],
                             fg=COLORS['dim'], bg=COLORS['bg'])
         loading.pack(anchor=tk.W)
 
         def on_done(resp):
             if self.current_page != 'account' or not page.winfo_exists():
-                return  # nguoi dung da chuyen trang khac trong luc cho
+                return  # người dùng đã chuyển trang khác trong lúc chờ
             loading.destroy()
 
             if 'error' in resp:
@@ -1845,12 +1858,12 @@ class ReviewBotApp:
             fields = [
                 ("Username", resp.get('username', '')),
                 ("Email", resp.get('email', '')),
-                ("Ho ten", resp.get('fullname', '')),
-                ("Vai tro", resp.get('role', '')),
-                ("Ngay tao", resp.get('created_at', '')),
-                ("So xu", f"{resp.get('xu', 0):,} \U0001FA99"),
-                ("Tong danh gia", str(resp.get('total_reviews', 0))),
-                ("Da danh gia (tool)", str(self.review_count)),
+                ("Họ tên", resp.get('fullname', '')),
+                ("Vai trò", resp.get('role', '')),
+                ("Ngày tạo", resp.get('created_at', '')),
+                ("Số xu", f"{resp.get('xu', 0):,} \U0001FA99"),
+                ("Tổng đánh giá", str(resp.get('total_reviews', 0))),
+                ("Đã đánh giá (tool)", str(self.review_count)),
             ]
 
             for label, value in fields:
@@ -1869,10 +1882,10 @@ class ReviewBotApp:
         page = tk.Frame(self.main_area, bg=COLORS['bg'])
         page.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
 
-        tk.Label(page, text="Thong ke", font=self.fonts['title'],
+        tk.Label(page, text="Thống kê", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W, pady=(0, 16))
 
-        loading = tk.Label(page, text="Dang tai...", font=self.fonts['small'],
+        loading = tk.Label(page, text="Đang tải...", font=self.fonts['small'],
                             fg=COLORS['dim'], bg=COLORS['bg'])
         loading.pack(anchor=tk.W)
 
@@ -1890,11 +1903,11 @@ class ReviewBotApp:
             self._update_sidebar_stats()
 
             stats = [
-                ("So xu hien co", f"{resp.get('xu', 0):,}", COLORS['success']),
-                ("Tong da danh gia (server)", str(resp.get('total_reviews', 0)), COLORS['accent']),
-                ("Da danh gia (tool)", str(self.review_count), COLORS['success']),
-                ("Tai khoan GG", str(len(self.google_accounts)), COLORS['warning']),
-                ("Session hoat dong", str(sum(1 for v in self.google_accounts_status.values() if v)), COLORS['star']),
+                ("Số xu hiện có", f"{resp.get('xu', 0):,}", COLORS['success']),
+                ("Tổng đã đánh giá (server)", str(resp.get('total_reviews', 0)), COLORS['accent']),
+                ("Đã đánh giá (tool)", str(self.review_count), COLORS['success']),
+                ("Tài khoản GG", str(len(self.google_accounts)), COLORS['warning']),
+                ("Session hoạt động", str(sum(1 for v in self.google_accounts_status.values() if v)), COLORS['star']),
             ]
 
             grid = tk.Frame(page, bg=COLORS['bg'])
@@ -1929,7 +1942,7 @@ class ReviewBotApp:
                 sec_inner = tk.Frame(sec, bg=COLORS['bg2'], padx=14, pady=10)
                 sec_inner.pack(fill=tk.BOTH, expand=True)
 
-                tk.Label(sec_inner, text="Danh gia gan day", font=self.fonts['heading'],
+                tk.Label(sec_inner, text="Đánh giá gần đây", font=self.fonts['heading'],
                          fg=COLORS['accent'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(0, 6))
 
                 for r in reviews[:10]:
