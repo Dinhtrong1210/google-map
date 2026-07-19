@@ -291,7 +291,7 @@ class ReviewBotApp:
     def _load_config(self):
         try:
             if os.path.exists(CONFIG_FILE):
-                with open(CONFIG_FILE, 'r') as f:
+                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                     cfg = json.load(f)
                 self.server_url = cfg.get('server_url', SERVER_URL)
                 self.token = cfg.get('token')
@@ -311,7 +311,7 @@ class ReviewBotApp:
                 'google_accounts_status': self.google_accounts_status,
                 'review_count': self.review_count,
             }
-            with open(CONFIG_FILE, 'w') as f:
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except:
             pass
@@ -1028,7 +1028,7 @@ class ReviewBotApp:
                 'last_comments': self.comment_text.get('1.0', tk.END).strip() if hasattr(self, 'comment_text') else '',
                 'review_count': self.review_count,
             }
-            with open(CONFIG_FILE, 'w') as f:
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             self._log("Da luu cau hinh!")
             messagebox.showinfo("Thanh cong", "Da luu cau hinh!")
@@ -1039,7 +1039,7 @@ class ReviewBotApp:
     def _load_home_config(self):
         try:
             if os.path.exists(CONFIG_FILE):
-                with open(CONFIG_FILE, 'r') as f:
+                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                     cfg = json.load(f)
                 self.google_accounts = cfg.get('google_accounts', [])
                 self.review_count = cfg.get('review_count', 0)
