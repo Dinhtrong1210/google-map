@@ -49,18 +49,32 @@ if not exist "dist\profiles" mkdir dist\profiles
 
 echo.
 echo ================================================
-echo   BUILD THANH CONG!
+echo   BUILD EXE THANH CONG!
 echo ================================================
 echo.
 echo   File EXE: dist\GoogleMapsReviewBot.exe
 echo.
-echo   Huong dan su dung:
-echo   1. Copy file EXE vao thu muc moi
-echo   2. Tao folder "images" cung thu muc (de anh)
-echo   3. Chay EXE
-echo   4. Nhap thong tin va bat dau danh gia
+
+echo [3/3] Dang tao installer (setup.exe co hoi tao icon Desktop)...
+set ISCC="%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+if not exist %ISCC% set ISCC="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+if not exist %ISCC% set ISCC="C:\Program Files\Inno Setup 6\ISCC.exe"
+
+if exist %ISCC% (
+    %ISCC% installer.iss
+    echo.
+    echo   Installer: installer_output\GoogleMapsReviewBot_Setup.exe
+) else (
+    echo   Khong tim thay Inno Setup, bo qua buoc tao installer.
+    echo   Cai Inno Setup ^(winget install JRSoftware.InnoSetup^) roi chay lai de co setup.exe.
+)
+
 echo.
-echo   Profile da dang nhap se duoc luu trong
-echo   folder "profiles" (khong can dang nhap lai)
+echo ================================================
+echo   XONG!
+echo ================================================
+echo.
+echo   Dua cho nguoi dung: installer_output\GoogleMapsReviewBot_Setup.exe
+echo   ^(cai nhu app binh thuong, co hoi tao icon Desktop, tu tao Start Menu^)
 echo.
 pause
