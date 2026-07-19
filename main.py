@@ -776,13 +776,54 @@ class ReviewBotApp:
         self._update_sidebar_stats()
         self._navigate('home')
 
+    def _make_scrollable_page(self, parent, padx=20, pady=16):
+        """Tao 1 Frame ma toan bo noi dung ben trong cuon duoc bang lan chuot khi
+        vuot qua chieu cao cua so - dung thay cho tk.Frame(parent) thong thuong o
+        dau moi ham _build_xxx_page. Tra ve Frame de build noi dung vao nhu binh thuong."""
+        container = tk.Frame(parent, bg=COLORS['bg'])
+        container.pack(fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(container, bg=COLORS['bg'], highlightthickness=0)
+        vsb = ttk.Scrollbar(container, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+
+        inner = tk.Frame(canvas, bg=COLORS['bg'])
+        inner_id = canvas.create_window((0, 0), window=inner, anchor=tk.NW)
+
+        content = tk.Frame(inner, bg=COLORS['bg'])
+        content.pack(fill=tk.BOTH, expand=True, padx=padx, pady=pady)
+
+        def _on_inner_configure(_e):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        inner.bind('<Configure>', _on_inner_configure)
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(inner_id, width=event.width)
+        canvas.bind('<Configure>', _on_canvas_configure)
+
+        self._bind_mousewheel(canvas, canvas)
+        return content
+
     def _bind_mousewheel(self, hover_widget, canvas):
         """Cho phep cuon canvas bang lan chuot, chi khi con tro dang o tren hover_widget
         (tranh anh huong scroll cua cac vung khac trong app vi bind_all la toan cuc)."""
         def _on_wheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            try:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except tk.TclError:
+                pass  # canvas da bi huy (vd: trang duoc ve lai trong khi chuot dang o tren no)
+
+        def _unbind(_e=None):
+            try:
+                hover_widget.unbind_all('<MouseWheel>')
+            except tk.TclError:
+                pass
+
         hover_widget.bind('<Enter>', lambda e: hover_widget.bind_all('<MouseWheel>', _on_wheel))
-        hover_widget.bind('<Leave>', lambda e: hover_widget.unbind_all('<MouseWheel>'))
+        hover_widget.bind('<Leave>', _unbind)
+        hover_widget.bind('<Destroy>', _unbind)
 
     def _make_support_link(self, parent, text, url):
         lbl = tk.Label(parent, text=text, font=self.fonts['link'], fg=COLORS['accent'],
@@ -839,8 +880,7 @@ class ReviewBotApp:
     # ==================== HOME PAGE ====================
 
     def _build_home_page(self):
-        page = tk.Frame(self.main_area, bg=COLORS['bg'])
-        page.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
+        page = self._make_scrollable_page(self.main_area)
 
         tk.Label(page, text="Chạy đánh giá", font=self.fonts['title'],
                  fg=COLORS['fg'], bg=COLORS['bg']).pack(anchor=tk.W)
@@ -970,7 +1010,7 @@ class ReviewBotApp:
 
         tk.Label(log_inner, text="  LOG", font=self.fonts['heading'],
                  fg=COLORS['accent'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X)
-        self.log_text = ScrollText(log_inner, bg=COLORS['log_bg'], fg=COLORS['log_fg'],
+        self.log_text = ScrollText(log_inner, height=14, bg=COLORS['log_bg'], fg=COLORS['log_fg'],
                                     font=self.fonts['log'], outer_bg=COLORS['bg2'])
         self.log_text.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
         self._log("Sẵn sàng! Nhập thông tin và bắt đầu đánh giá.")
