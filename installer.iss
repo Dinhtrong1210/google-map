@@ -40,6 +40,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\GoogleMapsReviewBot.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "config.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
+; Danh sach tai khoan Google mac dinh - chi ghi khi cai moi (onlyifdoesntexist),
+; khong ghi de neu nguoi dung da co tool_config.json tu truoc (vd: cai lai/nang cap
+; ban da tung dung, da tu them/xoa tai khoan rieng).
+Source: "installer_default_tool_config.json"; DestDir: "{app}"; DestName: "tool_config.json"; Flags: onlyifdoesntexist
 
 [Dirs]
 Name: "{app}\profiles"

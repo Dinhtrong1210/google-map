@@ -2,6 +2,7 @@
 accounts.txt
 config.json
 tool_config.json
+installer_default_tool_config.json
 
 # Browser profile data (session cookies, login data)
 profiles/
