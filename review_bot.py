@@ -427,6 +427,16 @@ class GoogleMapsReviewBot:
             self.log_status(f"Loi chon sao: {e}", True)
             return False
 
+    def _read_comment_value(self, element):
+        try:
+            val = self.driver.execute_script(
+                "return arguments[0].value !== undefined ? arguments[0].value : arguments[0].textContent;",
+                element
+            )
+            return (val or '').strip()
+        except:
+            return ''
+
     def _set_comment_value(self, element, value):
         try:
             element.clear()
@@ -434,22 +444,31 @@ class GoogleMapsReviewBot:
             pass
         try:
             element.send_keys(value)
-            return True
-        except:
-            try:
-                self.driver.execute_script("""
-                if (arguments[0].tagName.toLowerCase() === 'textarea' || arguments[0].tagName.toLowerCase() === 'input') {
-                    arguments[0].value = arguments[1];
-                } else {
-                    arguments[0].textContent = arguments[1];
-                    arguments[0].innerText = arguments[1];
-                }
-                arguments[0].dispatchEvent(new Event('input', {bubbles: true}));
-                arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
-                """, element, value)
+            if self._read_comment_value(element):
                 return True
-            except:
-                return False
+        except:
+            pass
+
+        # send_keys khong an (hoac khong dien vao), thu bang JS + tu ban su
+        # kien input/change - can thiet de Google (React) nhan ra co noi
+        # dung, neu khong nut "Dang" se khong bao gio bat len duoc.
+        try:
+            self.driver.execute_script("""
+            if (arguments[0].tagName.toLowerCase() === 'textarea' || arguments[0].tagName.toLowerCase() === 'input') {
+                arguments[0].value = arguments[1];
+            } else {
+                arguments[0].textContent = arguments[1];
+                arguments[0].innerText = arguments[1];
+            }
+            arguments[0].dispatchEvent(new Event('input', {bubbles: true}));
+            arguments[0].dispatchEvent(new Event('change', {bubbles: true}));
+            arguments[0].dispatchEvent(new KeyboardEvent('keyup', {bubbles: true}));
+            """, element, value)
+            if self._read_comment_value(element):
+                return True
+        except:
+            pass
+        return False
 
     def _find_comment_box(self):
         time.sleep(random.uniform(2, 4))
@@ -521,7 +540,17 @@ class GoogleMapsReviewBot:
                     time.sleep(0.3)
                 except:
                     pass
-                if self._set_comment_value(comment_box, comment):
+                ok = self._set_comment_value(comment_box, comment)
+                if ok:
+                    # Xac nhan lai gia tri that su nam trong o (khong chi tin
+                    # ket qua tra ve), phong truong hop bi ghi de/reset ngay
+                    # sau do boi chinh trang Google.
+                    time.sleep(random.uniform(0.5, 1))
+                    if not self._read_comment_value(comment_box):
+                        self.log_status("Binh luan bi rong sau khi nhap, thu lai lan 2...", True)
+                        ok = self._set_comment_value(comment_box, comment)
+
+                if ok:
                     self.log_status("Da nhap binh luan!")
                     time.sleep(random.uniform(1, 2))
                 else:
@@ -537,50 +566,75 @@ class GoogleMapsReviewBot:
             self.log_status(f"Loi viet binh luan: {e}", True)
             return False
 
+    def _find_enabled_submit_button(self):
+        submit_selectors = [
+            "//button[contains(@aria-label, 'Đăng') and not(contains(@aria-label, 'Đăng công khai'))]",
+            "//button[contains(@aria-label, 'Đăng')]",
+            "//button[.//span[contains(text(), 'Đăng')]]",
+            "//button[.//span[text()='Post']]",
+            "//button[text()='Post']",
+            "//button[contains(text(), 'Đăng')]",
+            "//button[contains(text(), 'Post')]",
+            "//button[contains(@aria-label, 'Post')]",
+            "//button[contains(@jsaction, 'submit')]",
+        ]
+        for selector in submit_selectors:
+            try:
+                elements = self.driver.find_elements(By.XPATH, selector)
+            except:
+                continue
+            for btn in elements:
+                try:
+                    if not btn.is_displayed() or not btn.is_enabled():
+                        continue
+                    btn_text = (btn.text or '').strip().lower()
+                    aria = (btn.get_attribute('aria-label') or '').lower()
+                    if 'dang cong khai' in aria or 'post publicly' in aria:
+                        continue
+                    if btn_text in ['đăng', 'post'] or 'submit' in aria or 'post' in aria or 'đăng' in aria:
+                        return btn
+                except:
+                    continue
+        return None
+
     def submit_review(self):
         self.log_status("📤 Đang gửi đánh giá...")
         try:
             self._switch_to_review_iframe()
 
-            submit_selectors = [
-                "//button[contains(@aria-label, 'Đăng') and not(contains(@aria-label, 'Đăng công khai'))]",
-                "//button[contains(@aria-label, 'Đăng')]",
-                "//button[.//span[contains(text(), 'Đăng')]]",
-                "//button[.//span[text()='Post']]",
-                "//button[text()='Post']",
-                "//button[contains(text(), 'Đăng')]",
-                "//button[contains(text(), 'Post')]",
-                "//button[contains(@aria-label, 'Post')]",
-                "//button[contains(@jsaction, 'submit')]",
-            ]
+            # Nut "Dang" thuong bi disable mot nhip ngan ngay sau khi vua go
+            # xong binh luan (Google can thoi gian xu ly su kien input truoc
+            # khi bat nut len) - phai CHO va THU LAI nhieu lan, khong duoc
+            # quet mot lan roi bo cuoc, neu khong se bo sot rat nhieu truong
+            # hop dung ra chi cham vai giay la nut da bat.
+            btn = None
+            max_wait_seconds = 20
+            poll_interval = 0.5
+            attempts = int(max_wait_seconds / poll_interval)
+            for attempt in range(attempts):
+                btn = self._find_enabled_submit_button()
+                if btn:
+                    break
+                if attempt % 4 == 0:
+                    self.log_status(f"⏳ Nút 'Đăng' chưa bật, đang chờ... ({attempt * poll_interval:.0f}s)")
+                time.sleep(poll_interval)
 
-            for selector in submit_selectors:
+            if btn:
+                self.log_status(f"✅ Tìm thấy nút gửi: text='{btn.text}' aria='{btn.get_attribute('aria-label')}'")
+                self.driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center', behavior:'smooth'});",
+                    btn
+                )
+                time.sleep(0.5)
                 try:
-                    elements = self.driver.find_elements(By.XPATH, selector)
-                    for btn in elements:
-                        try:
-                            if not btn.is_displayed() or not btn.is_enabled():
-                                continue
-                            btn_text = (btn.text or '').strip().lower()
-                            aria = (btn.get_attribute('aria-label') or '').lower()
-                            if 'dang cong khai' in aria or 'post publicly' in aria:
-                                continue
-                            if btn_text in ['đăng', 'post'] or 'submit' in aria or 'post' in aria or 'đăng' in aria:
-                                self.log_status(f"✅ Tìm thấy nút gửi: text='{btn.text}' aria='{btn.get_attribute('aria-label')}'")
-                                self.driver.execute_script(
-                                    "arguments[0].scrollIntoView({block:'center', behavior:'smooth'});",
-                                    btn
-                                )
-                                time.sleep(0.5)
-                                ActionChains(self.driver).move_to_element(btn).pause(0.3).click().perform()
-                                self.log_status("✅ Đã gửi đánh giá!")
-                                time.sleep(random.uniform(3, 5))
-                                self._switch_to_main()
-                                return True
-                        except:
-                            continue
-                except:
-                    continue
+                    ActionChains(self.driver).move_to_element(btn).pause(0.3).click().perform()
+                except Exception:
+                    # Fallback neu ActionChains khong click duoc (vd bi element khac de len)
+                    self.driver.execute_script("arguments[0].click();", btn)
+                self.log_status("✅ Đã gửi đánh giá!")
+                time.sleep(random.uniform(3, 5))
+                self._switch_to_main()
+                return True
 
             self.log_status("🔍 Fallback: Ctrl+Enter...")
             try:
@@ -594,7 +648,7 @@ class GoogleMapsReviewBot:
                 pass
 
             self._switch_to_main()
-            self.log_status("❌ Không thể gửi đánh giá", True)
+            self.log_status("❌ Không thể gửi đánh giá (nút 'Đăng' không bật sau 20s)", True)
             return False
 
         except Exception as e:
