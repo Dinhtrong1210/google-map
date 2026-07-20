@@ -8,6 +8,7 @@ from tkinter import ttk, messagebox, filedialog
 from tkinter import font as tkfont
 import threading
 import os
+import sys
 import json
 import time
 import random
@@ -19,8 +20,18 @@ from review_bot import GoogleMapsReviewBot
 
 VERSION = "4.0.0"
 REVIEW_COST_XU_DEFAULT = 12  # gia tri hien thi mac dinh, server la nguon xac thuc thuc te
-CONFIG_FILE = "tool_config.json"
-PROFILES_DIR = os.path.join(os.getcwd(), "profiles")
+
+# Thu muc chua file exe/script that su - KHONG dung os.getcwd() vi thu muc lam viec
+# luc khoi chay phu thuoc vao cach nguoi dung mo tool (shortcut khong dat san
+# "Start in", chay tu cmd o thu muc khac, v.v.) va co the khac thu muc cai dat,
+# khien tool_config.json/profiles khong tim thay tren mot so may.
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CONFIG_FILE = os.path.join(BASE_DIR, "tool_config.json")
+PROFILES_DIR = os.path.join(BASE_DIR, "profiles")
 
 SERVER_URL = "https://phamhuudungmedia.vn"
 
@@ -222,7 +233,7 @@ class ReviewBotApp:
         self.root.geometry("1100x750")
         self.root.minsize(950, 650)
         self.root.configure(bg=COLORS['bg'])
-        icon_path = os.path.join(os.getcwd(), "icon.ico")
+        icon_path = os.path.join(BASE_DIR, "icon.ico")
         if os.path.exists(icon_path):
             self.root.iconbitmap(icon_path)
 
