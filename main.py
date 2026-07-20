@@ -1907,7 +1907,7 @@ class ReviewBotApp:
                 self._async_api_call('/api/tool/profile', 'GET', on_done=self._on_profile_refresh_after_deposit)
                 return
 
-            self.root.after(3000, lambda: self._async_api_call(
+            self.root.after(2000, lambda: self._async_api_call(
                 f'/api/tool/deposit/status/{tx_id}', 'GET', on_done=on_status))
 
         self._async_api_call(f'/api/tool/deposit/status/{tx_id}', 'GET', on_done=on_status)
