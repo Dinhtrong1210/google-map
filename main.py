@@ -253,6 +253,7 @@ class ReviewBotApp:
         self.review_count = 0
         self._is_reviewing = False
         self._out_of_xu = False
+        self.selected_photos = []
 
         self._load_config()
         self._show_login_screen()
@@ -986,6 +987,15 @@ class ReviewBotApp:
         self.comment_hint.pack(anchor=tk.W)
         self.comment_text.bind('<KeyRelease>', self._update_comment_hint)
 
+        photo_row = tk.Frame(inner2, bg=COLORS['bg2'])
+        photo_row.pack(fill=tk.X, pady=(8, 0))
+        make_button(photo_row, text="📷 Đính kèm ảnh (tùy chọn)", command=self._pick_photos,
+                  bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['tiny'],
+                  relief=tk.FLAT, padx=8, pady=3, cursor="hand2").pack(side=tk.LEFT)
+        self.photo_hint = tk.Label(photo_row, text="Chưa chọn ảnh nào", font=self.fonts['tiny'],
+                                   fg=COLORS['dim'], bg=COLORS['bg2'])
+        self.photo_hint.pack(side=tk.LEFT, padx=(8, 0))
+
         btn_row = tk.Frame(page, bg=COLORS['bg'])
         btn_row.pack(fill=tk.X, pady=(0, 10))
 
@@ -1179,6 +1189,21 @@ class ReviewBotApp:
         lines = [l for l in raw.split('\n') if l.strip()] if raw else []
         self.comment_hint.config(text=f"{len(lines)} nội dung | Mỗi tài khoản lấy 1 nội dung ngẫu nhiên")
 
+    def _pick_photos(self):
+        paths = filedialog.askopenfilenames(
+            title="Chọn ảnh đính kèm (dùng chung cho tất cả đánh giá trong lượt chạy này)",
+            filetypes=[("Ảnh", "*.jpg *.jpeg *.png *.webp"), ("Tất cả file", "*.*")]
+        )
+        if paths:
+            self.selected_photos = list(paths)
+            names = ", ".join(os.path.basename(p) for p in self.selected_photos[:3])
+            more = f" (+{len(self.selected_photos) - 3} ảnh khác)" if len(self.selected_photos) > 3 else ""
+            self.photo_hint.config(text=f"Đã chọn {len(self.selected_photos)} ảnh: {names}{more}",
+                                    fg=COLORS['success'])
+        else:
+            self.selected_photos = []
+            self.photo_hint.config(text="Chưa chọn ảnh nào", fg=COLORS['dim'])
+
     def _log(self, msg, is_error=False):
         def _do():
             tag = "[ERR] " if is_error else ""
@@ -1259,11 +1284,12 @@ class ReviewBotApp:
         self._is_reviewing = True
 
         thread = threading.Thread(target=self._run_review,
-                                  args=(url, comment_lines, stars, target, chrome_count))
+                                  args=(url, comment_lines, stars, target, chrome_count, self.selected_photos))
         thread.daemon = True
         thread.start()
 
-    def _run_review(self, url, comment_lines, stars, target, chrome_count):
+    def _run_review(self, url, comment_lines, stars, target, chrome_count, photo_paths=None):
+        photo_paths = photo_paths or []
         session_reviewed = 0
         session_failed = 0
         lock = threading.Lock()
@@ -1385,6 +1411,8 @@ class ReviewBotApp:
                         with lock:
                             session_failed += 1
                         continue
+                    if photo_paths:
+                        bot.attach_photos(photo_paths)  # tuy chon, that bai khong lam dung review
                     if not bot.submit_review():
                         self._log("Lỗi gửi đánh giá! Bỏ qua.", True)
                         with lock:

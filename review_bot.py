@@ -597,6 +597,94 @@ class GoogleMapsReviewBot:
                     continue
         return None
 
+    def _find_file_input_backend_ids(self, node):
+        """De quy qua cay DOM tra ve tu DOM.getDocument(pierce=True), tim moi
+        node <input type="file">, tra ve list backendNodeId. Dung pierce=True
+        vi nut 'Them anh va video' cua Google nam sau iframe/shadow DOM ma
+        Selenium khong the tim thay bang find_element/execute_script thong
+        thuong (da kiem chung: XPath, quet iframe, shadow-DOM JS deu that bai,
+        chi lenh CDP DOM o tang browser-engine moi xuyen qua duoc)."""
+        found = []
+        if node.get('nodeName', '').upper() == 'INPUT':
+            attrs = node.get('attributes', [])
+            attr_dict = {attrs[i]: attrs[i + 1] for i in range(0, len(attrs) - 1, 2)}
+            if attr_dict.get('type', '').lower() == 'file':
+                found.append(node['backendNodeId'])
+        for child in node.get('children', []):
+            found.extend(self._find_file_input_backend_ids(child))
+        if node.get('contentDocument'):
+            found.extend(self._find_file_input_backend_ids(node['contentDocument']))
+        for sr in node.get('shadowRoots', []):
+            found.extend(self._find_file_input_backend_ids(sr))
+        return found
+
+    def attach_photos(self, photo_paths):
+        """Dinh kem 1 hoac nhieu anh vao bai danh gia dang soan (goi sau
+        write_comment, truoc submit_review). Khong bat buoc - neu that bai,
+        review van tiep tuc binh thuong ma khong co anh."""
+        if not photo_paths:
+            return True
+        photo_paths = [p for p in photo_paths if p and os.path.exists(p)]
+        if not photo_paths:
+            return True
+
+        self.log_status(f"🖼️ Đang đính kèm {len(photo_paths)} ảnh...")
+        try:
+            self._switch_to_main()
+            self.driver.execute_cdp_cmd('DOM.enable', {})
+
+            doc = self.driver.execute_cdp_cmd('DOM.getDocument', {'pierce': True, 'depth': -1})
+            backend_ids = self._find_file_input_backend_ids(doc['root'])
+
+            if not backend_ids:
+                # Input chua ton tai - phai bam nut "Them anh va video" de
+                # Google tao no ra. Nut nay nam trong iframe/shadow DOM khong
+                # the tim bang DOM API thong thuong, nen click theo TOA DO
+                # PIXEL thuc te (da kiem chung hoat dong on dinh) thay vi
+                # tim phan tu. Toa do goc (952, 654) do tren man hinh mau
+                # 1926x986, phai quy doi theo ty le viewport that.
+                window_size = self.driver.execute_script(
+                    "return {width: window.innerWidth, height: window.innerHeight};"
+                )
+                scale_x = window_size['width'] / 1926
+                scale_y = window_size['height'] / 986
+                btn_x, btn_y = round(952 * scale_x), round(654 * scale_y)
+
+                try:
+                    self.driver.execute_cdp_cmd('Page.enable', {})
+                    self.driver.execute_cdp_cmd('Page.setInterceptFileChooserDialog', {'enabled': True})
+                except Exception:
+                    pass  # ban Chrome cu co the khong ho tro, van thu tiep
+
+                self.driver.execute_cdp_cmd('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': btn_x, 'y': btn_y})
+                time.sleep(0.2)
+                self.driver.execute_cdp_cmd('Input.dispatchMouseEvent', {
+                    'type': 'mousePressed', 'x': btn_x, 'y': btn_y, 'button': 'left', 'clickCount': 1
+                })
+                time.sleep(0.1)
+                self.driver.execute_cdp_cmd('Input.dispatchMouseEvent', {
+                    'type': 'mouseReleased', 'x': btn_x, 'y': btn_y, 'button': 'left', 'clickCount': 1
+                })
+                time.sleep(2)
+
+                doc = self.driver.execute_cdp_cmd('DOM.getDocument', {'pierce': True, 'depth': -1})
+                backend_ids = self._find_file_input_backend_ids(doc['root'])
+
+            if not backend_ids:
+                self.log_status("⚠️ Không tìm thấy ô đính kèm ảnh, bỏ qua (không ảnh hưởng đánh giá).", True)
+                return False
+
+            self.driver.execute_cdp_cmd('DOM.setFileInputFiles', {
+                'files': photo_paths,
+                'backendNodeId': backend_ids[0]
+            })
+            self.log_status(f"✅ Đã đính kèm {len(photo_paths)} ảnh!")
+            time.sleep(random.uniform(2, 3))
+            return True
+        except Exception as e:
+            self.log_status(f"⚠️ Lỗi đính kèm ảnh: {e} (bỏ qua, không ảnh hưởng đánh giá)", True)
+            return False
+
     def submit_review(self):
         self.log_status("📤 Đang gửi đánh giá...")
         try:
