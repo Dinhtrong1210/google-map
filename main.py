@@ -253,7 +253,7 @@ class ReviewBotApp:
         self.review_count = 0
         self._is_reviewing = False
         self._out_of_xu = False
-        self.selected_photos = []
+        self.review_media = []  # list of list-of-path, song song voi tung dong binh luan
 
         self._load_config()
         self._show_login_screen()
@@ -985,16 +985,13 @@ class ReviewBotApp:
         self.comment_hint = tk.Label(inner2, text="0 dòng", font=self.fonts['tiny'],
                                      fg=COLORS['dim'], bg=COLORS['bg2'])
         self.comment_hint.pack(anchor=tk.W)
-        self.comment_text.bind('<KeyRelease>', self._update_comment_hint)
+        self.comment_text.bind('<KeyRelease>', self._on_comment_text_changed)
 
-        photo_row = tk.Frame(inner2, bg=COLORS['bg2'])
-        photo_row.pack(fill=tk.X, pady=(8, 0))
-        make_button(photo_row, text="📷 Đính kèm ảnh (tùy chọn)", command=self._pick_photos,
-                  bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['tiny'],
-                  relief=tk.FLAT, padx=8, pady=3, cursor="hand2").pack(side=tk.LEFT)
-        self.photo_hint = tk.Label(photo_row, text="Chưa chọn ảnh nào", font=self.fonts['tiny'],
-                                   fg=COLORS['dim'], bg=COLORS['bg2'])
-        self.photo_hint.pack(side=tk.LEFT, padx=(8, 0))
+        tk.Label(inner2, text="Ảnh/video riêng cho từng dòng (tùy chọn):", font=self.fonts['small'],
+                 fg=COLORS['dim'], bg=COLORS['bg2'], anchor=tk.W).pack(fill=tk.X, pady=(10, 2))
+        self.media_rows_frame = tk.Frame(inner2, bg=COLORS['bg2'])
+        self.media_rows_frame.pack(fill=tk.X)
+        self._refresh_review_media_rows()
 
         btn_row = tk.Frame(page, bg=COLORS['bg'])
         btn_row.pack(fill=tk.X, pady=(0, 10))
@@ -1189,20 +1186,56 @@ class ReviewBotApp:
         lines = [l for l in raw.split('\n') if l.strip()] if raw else []
         self.comment_hint.config(text=f"{len(lines)} nội dung | Mỗi tài khoản lấy 1 nội dung ngẫu nhiên")
 
-    def _pick_photos(self):
+    def _on_comment_text_changed(self, event=None):
+        self._update_comment_hint()
+        self._refresh_review_media_rows()
+
+    def _get_comment_lines(self):
+        raw = self.comment_text.get('1.0', tk.END).strip()
+        return [l.strip() for l in raw.split('\n') if l.strip()] if raw else []
+
+    def _refresh_review_media_rows(self):
+        lines = self._get_comment_lines()
+        # dieu chinh do dai self.review_media cho khop so dong hien tai,
+        # giu nguyen media da gan cho cac dong con lai theo vi tri
+        while len(self.review_media) < len(lines):
+            self.review_media.append([])
+        del self.review_media[len(lines):]
+
+        for w in self.media_rows_frame.winfo_children():
+            w.destroy()
+
+        if not lines:
+            tk.Label(self.media_rows_frame,
+                     text="Nhập nội dung bình luận ở trên trước, rồi gán ảnh/video riêng cho từng dòng ở đây.",
+                     font=self.fonts['tiny'], fg=COLORS['dim'], bg=COLORS['bg2'],
+                     anchor=tk.W, wraplength=520, justify=tk.LEFT).pack(fill=tk.X, pady=2)
+            return
+
+        for i, line in enumerate(lines):
+            row = tk.Frame(self.media_rows_frame, bg=COLORS['bg2'])
+            row.pack(fill=tk.X, pady=1)
+            preview = (line[:40] + '…') if len(line) > 40 else line
+            tk.Label(row, text=f"Dòng {i + 1}: {preview}", font=self.fonts['tiny'],
+                     fg=COLORS['fg'], bg=COLORS['bg2'], anchor=tk.W, width=45).pack(side=tk.LEFT)
+            make_button(row, text="📷 Ảnh/Video", command=lambda idx=i: self._pick_media_for_line(idx),
+                      bg=COLORS['bg4'], fg=COLORS['fg'], font=self.fonts['tiny'],
+                      relief=tk.FLAT, padx=6, pady=2, cursor="hand2").pack(side=tk.LEFT, padx=(6, 6))
+            count = len(self.review_media[i])
+            hint_text = f"✓ {count} file" if count else "Chưa chọn"
+            hint_color = COLORS['success'] if count else COLORS['dim']
+            tk.Label(row, text=hint_text, font=self.fonts['tiny'], fg=hint_color,
+                     bg=COLORS['bg2']).pack(side=tk.LEFT)
+
+    def _pick_media_for_line(self, idx):
         paths = filedialog.askopenfilenames(
-            title="Chọn ảnh đính kèm (dùng chung cho tất cả đánh giá trong lượt chạy này)",
-            filetypes=[("Ảnh", "*.jpg *.jpeg *.png *.webp"), ("Tất cả file", "*.*")]
+            title=f"Chọn ảnh/video cho dòng {idx + 1}",
+            filetypes=[("Ảnh/Video", "*.jpg *.jpeg *.png *.webp *.mp4 *.mov *.avi *.mkv"),
+                       ("Tất cả file", "*.*")]
         )
-        if paths:
-            self.selected_photos = list(paths)
-            names = ", ".join(os.path.basename(p) for p in self.selected_photos[:3])
-            more = f" (+{len(self.selected_photos) - 3} ảnh khác)" if len(self.selected_photos) > 3 else ""
-            self.photo_hint.config(text=f"Đã chọn {len(self.selected_photos)} ảnh: {names}{more}",
-                                    fg=COLORS['success'])
-        else:
-            self.selected_photos = []
-            self.photo_hint.config(text="Chưa chọn ảnh nào", fg=COLORS['dim'])
+        if idx < len(self.review_media):
+            self.review_media[idx] = list(paths) if paths else []
+        self._refresh_review_media_rows()
 
     def _log(self, msg, is_error=False):
         def _do():
@@ -1213,8 +1246,7 @@ class ReviewBotApp:
 
     def _start_review(self):
         url = self.url_entry.get().strip()
-        raw = self.comment_text.get('1.0', tk.END).strip()
-        comment_lines = [l.strip() for l in raw.split('\n') if l.strip()] if raw else []
+        comment_lines = self._get_comment_lines()
         target = self.target_count.get()
         chrome_count = self.chrome_count.get()
         stars = self.star_var.get()
@@ -1233,6 +1265,11 @@ class ReviewBotApp:
         if not self.google_accounts:
             messagebox.showerror("Lỗi", "Nhập ít nhất 1 tài khoản Google!\nVào trang 'Tài khoản GG' để thêm.")
             return
+
+        # Dam bao review_media dung khop voi comment_lines hien tai (vd nguoi
+        # dung go xong roi bam Bat dau ma chua trigger KeyRelease lan cuoi).
+        self._refresh_review_media_rows()
+        review_items = list(zip(comment_lines, self.review_media))
 
         total_accounts = len(self.google_accounts)
         actual_chrome = max(1, min(chrome_count, target, total_accounts))
@@ -1253,7 +1290,7 @@ class ReviewBotApp:
                     f"Nạp thêm xu ngay bây giờ?")
                 return
 
-            self._confirm_and_start_review(url, comment_lines, stars, target, chrome_count,
+            self._confirm_and_start_review(url, review_items, stars, target, chrome_count,
                                             total_accounts, actual_chrome, cost)
 
         self._async_api_call('/api/tool/profile', 'GET', on_done=on_profile)
@@ -1262,7 +1299,7 @@ class ReviewBotApp:
         if messagebox.askyesno("Không đủ xu", message):
             self._navigate('deposit')
 
-    def _confirm_and_start_review(self, url, comment_lines, stars, target, chrome_count,
+    def _confirm_and_start_review(self, url, review_items, stars, target, chrome_count,
                                    total_accounts, actual_chrome, cost):
         if not messagebox.askyesno("Xác nhận",
                 f"Mục tiêu: {target} đánh giá THÀNH CÔNG\n"
@@ -1284,19 +1321,21 @@ class ReviewBotApp:
         self._is_reviewing = True
 
         thread = threading.Thread(target=self._run_review,
-                                  args=(url, comment_lines, stars, target, chrome_count, self.selected_photos))
+                                  args=(url, review_items, stars, target, chrome_count))
         thread.daemon = True
         thread.start()
 
-    def _run_review(self, url, comment_lines, stars, target, chrome_count, photo_paths=None):
-        photo_paths = photo_paths or []
+    def _run_review(self, url, review_items, stars, target, chrome_count):
         session_reviewed = 0
         session_failed = 0
         lock = threading.Lock()
         next_index = [0]  # con tro dung chung, dung list de sua duoc trong closure
 
-        shuffled_comments = comment_lines[:]
-        random.shuffle(shuffled_comments)
+        # review_items la list (comment, media_paths) - shuffle CA CAP voi
+        # nhau de moi noi dung van giu dung media rieng cua no sau khi tron,
+        # khong duoc tron rieng comment va media (se lam sai lech cap).
+        shuffled_items = review_items[:]
+        random.shuffle(shuffled_items)
         shuffled_accounts = self.google_accounts[:]
         random.shuffle(shuffled_accounts)
         total_accounts = len(shuffled_accounts)
@@ -1313,8 +1352,8 @@ class ReviewBotApp:
                 idx = next_index[0]
                 next_index[0] += 1
                 account = shuffled_accounts[idx]
-                comment = shuffled_comments[idx % len(shuffled_comments)]
-                return idx, account, comment
+                comment, media_paths = shuffled_items[idx % len(shuffled_items)]
+                return idx, account, comment, media_paths
 
         def worker(worker_id):
             nonlocal session_reviewed, session_failed
@@ -1322,7 +1361,7 @@ class ReviewBotApp:
                 item = get_next_account()
                 if item is None:
                     break
-                idx, account, comment = item
+                idx, account, comment, media_paths = item
 
                 email = account.get('email', '')
                 password = account.get('password', '')
@@ -1340,6 +1379,8 @@ class ReviewBotApp:
                     else:
                         self._log(f"  [Đăng nhập mới]")
                     self._log(f"  Nội dung: {comment[:60]}...")
+                    if media_paths:
+                        self._log(f"  Đính kèm: {len(media_paths)} ảnh/video")
 
                 charge_resp = api_call('/api/tool/review-charge', 'POST',
                                        token=self.token, server_url=self.server_url)
@@ -1411,8 +1452,8 @@ class ReviewBotApp:
                         with lock:
                             session_failed += 1
                         continue
-                    if photo_paths:
-                        bot.attach_photos(photo_paths)  # tuy chon, that bai khong lam dung review
+                    if media_paths:
+                        bot.attach_photos(media_paths)  # tuy chon, that bai khong lam dung review
                     if not bot.submit_review():
                         self._log("Lỗi gửi đánh giá! Bỏ qua.", True)
                         with lock:
