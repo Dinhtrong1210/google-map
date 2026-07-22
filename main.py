@@ -1184,7 +1184,7 @@ class ReviewBotApp:
     def _update_comment_hint(self, event=None):
         raw = self.comment_text.get('1.0', tk.END).strip()
         lines = [l for l in raw.split('\n') if l.strip()] if raw else []
-        self.comment_hint.config(text=f"{len(lines)} nội dung | Mỗi tài khoản lấy 1 nội dung ngẫu nhiên")
+        self.comment_hint.config(text=f"{len(lines)} nội dung | Mỗi nội dung chỉ đăng THÀNH CÔNG 1 lần, không trùng lặp")
 
     def _on_comment_text_changed(self, event=None):
         self._update_comment_hint()
@@ -1301,18 +1301,27 @@ class ReviewBotApp:
 
     def _confirm_and_start_review(self, url, review_items, stars, target, chrome_count,
                                    total_accounts, actual_chrome, cost):
+        num_contents = len(review_items)
+        content_warning = ""
+        if num_contents < target:
+            content_warning = (f"\n⚠️ Chỉ có {num_contents} nội dung nhưng mục tiêu là {target}.\n"
+                                f"Mỗi nội dung chỉ đăng thành công 1 lần nên tool sẽ dừng ở tối đa "
+                                f"{num_contents} đánh giá (thêm nội dung nếu muốn nhiều hơn).\n")
+
         if not messagebox.askyesno("Xác nhận",
                 f"Mục tiêu: {target} đánh giá THÀNH CÔNG\n"
+                f"Số nội dung: {num_contents} (mỗi nội dung chỉ đăng 1 lần, không trùng lặp)\n"
                 f"Tài khoản khả dụng: {total_accounts}\n"
                 f"Chrome cùng lúc: {actual_chrome}\n"
-                f"Chi phí: {cost} xu/đánh giá (tối đa {target * cost} xu nếu đủ tài khoản)\n\n"
+                f"Chi phí: {cost} xu/đánh giá (tối đa {target * cost} xu nếu đủ tài khoản)\n"
+                f"{content_warning}\n"
                 f"Nếu 1 tài khoản bị lỗi/không đăng nhập được, tool sẽ tự động\n"
-                f"thử tài khoản khác cho đến khi đủ mục tiêu (hoặc hết tài khoản/hết xu).\n\n"
+                f"thử tài khoản khác cho nội dung đó (hoặc hết tài khoản/hết xu/hết nội dung).\n\n"
                 f"Bắt đầu?"):
             return
 
         self.log_text.delete('1.0', tk.END)
-        self._log(f"BẮT ĐẦU: mục tiêu {target} đánh giá thành công | {total_accounts} tài khoản khả dụng")
+        self._log(f"BẮT ĐẦU: mục tiêu {target} đánh giá thành công | {num_contents} nội dung | {total_accounts} tài khoản khả dụng")
         self._log(f"{actual_chrome} Chrome song song | {cost} xu/đánh giá")
         self._stop_event.clear()
         self._out_of_xu = False
@@ -1340,20 +1349,39 @@ class ReviewBotApp:
         random.shuffle(shuffled_accounts)
         total_accounts = len(shuffled_accounts)
 
+        # Hang doi noi dung CHUA TUNG DANG THANH CONG - moi noi dung chi
+        # duoc lay ra dung 1 lan (pop khoi hang doi), tranh trung lap noi
+        # dung giua cac danh gia. Neu lan thu do that bai vi ly do ky thuat
+        # (khong phai do noi dung), noi dung se duoc release_content() tra
+        # lai vao cuoi hang doi de thu lai voi tai khoan khac; neu thanh
+        # cong thi khong bao gio tra lai nua (tieu thu vinh vien).
+        content_queue = list(shuffled_items)
+        content_exhausted = [False]
+
         actual_chrome = max(1, min(chrome_count, target, total_accounts))
 
         def get_next_account():
-            """Lay tai khoan tiep theo chua thu qua. Tra ve None neu da du muc tieu,
-            het tai khoan, het xu, hoac nguoi dung bam Dung - bao hieu worker nen dung."""
+            """Lay tai khoan + noi dung tiep theo chua dung. Tra ve None neu da du
+            muc tieu, het tai khoan, het xu, het noi dung chua dung, hoac nguoi
+            dung bam Dung - bao hieu worker nen dung."""
             with lock:
                 if (session_reviewed >= target or self._out_of_xu
                         or self._stop_event.is_set() or next_index[0] >= total_accounts):
                     return None
+                if not content_queue:
+                    content_exhausted[0] = True
+                    return None
                 idx = next_index[0]
                 next_index[0] += 1
                 account = shuffled_accounts[idx]
-                comment, media_paths = shuffled_items[idx % len(shuffled_items)]
+                comment, media_paths = content_queue.pop(0)
                 return idx, account, comment, media_paths
+
+        def release_content(comment, media_paths):
+            """Tra noi dung ve hang doi de thu lai voi tai khoan khac, chi goi
+            khi lan thu THAT BAI (khong phai do noi dung ma do loi ky thuat)."""
+            with lock:
+                content_queue.append((comment, media_paths))
 
         def worker(worker_id):
             nonlocal session_reviewed, session_failed
@@ -1390,6 +1418,7 @@ class ReviewBotApp:
                                    f"(cần {charge_resp.get('cost', REVIEW_COST_XU_DEFAULT)} xu/đánh giá). Dừng lại.", True)
                         session_failed += 1
                         self._out_of_xu = True
+                    release_content(comment, media_paths)
                     continue
 
                 review_success = False
@@ -1479,6 +1508,7 @@ class ReviewBotApp:
                     if not review_success:
                         api_call('/api/tool/review-refund', 'POST',
                                  token=self.token, server_url=self.server_url)
+                        release_content(comment, media_paths)  # loi ky thuat, tra noi dung ve de thu lai
                     if bot:
                         try:
                             bot.close_browser()
@@ -1498,6 +1528,9 @@ class ReviewBotApp:
         self._log("\n" + "=" * 40)
         if session_reviewed >= target:
             self._log(f"ĐẠT MỤC TIÊU! {session_reviewed}/{target}")
+        elif content_exhausted[0]:
+            self._log(f"HẾT NỘI DUNG CHƯA DÙNG! {session_reviewed} thành công, {session_failed} thất bại / mục tiêu {target} "
+                       f"(mỗi nội dung chỉ đăng 1 lần, thêm nội dung mới nếu muốn đánh giá tiếp)")
         elif next_index[0] >= total_accounts:
             self._log(f"HẾT TÀI KHOẢN! {session_reviewed} thành công, {session_failed} thất bại / mục tiêu {target}")
         else:
