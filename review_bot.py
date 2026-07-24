@@ -7,6 +7,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 import time, random, os, json
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 
 class GoogleMapsReviewBot:
@@ -24,12 +25,18 @@ class GoogleMapsReviewBot:
         self.options.add_argument('--disable-setuid-sandbox')
         self.options.add_argument(f'--remote-debugging-port={debug_port}')
         self.options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36')
+        # Ep giao dien Chrome + Google Maps luon la tieng Viet, bat ke Chrome
+        # mac dinh cua may dang de ngon ngu gi - cac selector trong file nay
+        # duoc viet/test theo giao dien tieng Viet, chay tieng Anh se phai
+        # do qua nhieu fallback that bai truoc khi khop, gay giat/khung.
+        self.options.add_argument('--lang=vi-VN')
         if user_data_dir:
             self.options.add_argument(f'--user-data-dir={user_data_dir}')
         self.options.add_experimental_option("prefs", {
             "profile.default_content_setting_values.notifications": 2,
             "credentials_enable_service": False,
-            "profile.password_manager_enabled": False
+            "profile.password_manager_enabled": False,
+            "intl.accept_languages": "vi-VN,vi"
         })
         self.options.add_experimental_option("excludeSwitches", ["enable-automation"])
         self.options.add_experimental_option('useAutomationExtension', False)
@@ -108,10 +115,21 @@ class GoogleMapsReviewBot:
             self.log_status(f"Loi dang nhap: {e}", True)
             return False
 
+    def _force_vi_locale(self, url):
+        """Gan/ghi de tham so hl=vi vao URL de Google Maps tra ve giao dien
+        tieng Viet, bat ke ngon ngu mac dinh cua Chrome tren may nguoi dung."""
+        try:
+            parts = urlsplit(url)
+            query = dict(parse_qsl(parts.query))
+            query['hl'] = 'vi'
+            return urlunsplit(parts._replace(query=urlencode(query)))
+        except Exception:
+            return url
+
     def navigate_to_place(self, place_url):
         self.log_status("📍 Đang mở địa điểm...")
         try:
-            self.driver.get(place_url)
+            self.driver.get(self._force_vi_locale(place_url))
             time.sleep(random.uniform(5, 8))
             try:
                 self.wait.until(
